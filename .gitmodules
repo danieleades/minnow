@@ -1,0 +1,3 @@
+[submodule "arithmetic-coding"]
+	path = arithmetic-coding
+	url = https://github.com/danieleades/arithmetic-coding.git

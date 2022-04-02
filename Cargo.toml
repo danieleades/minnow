@@ -1,0 +1,11 @@
+[package]
+name = "guppy"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+arithmetic-coding = { path = "./arithmetic-coding" }
+bitstream-io = "1.2.0"
+thiserror = "1.0.30"
