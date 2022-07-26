@@ -8,4 +8,9 @@ edition = "2021"
 [dependencies]
 arithmetic-coding = { path = "./arithmetic-coding" }
 bitstream-io = "1.2.0"
+guppy-derive = { path = "guppy-derive" }
+num-traits = "0.2.14"
 thiserror = "1.0.30"
+
+[dev-dependencies]
+test-case = "2.0.2"
