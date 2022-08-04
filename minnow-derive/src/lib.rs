@@ -1,3 +1,6 @@
+#![deny(clippy::all, clippy::cargo)]
+#![warn(clippy::pedantic)]
+
 use darling::FromDeriveInput;
 use proc_macro::{TokenStream};
 use process::process;

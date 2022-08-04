@@ -1,4 +1,4 @@
-use guppy::Encodeable;
+use minnow::Encodeable;
 
 #[derive(Debug, Encodeable)]
 pub struct MyStruct(

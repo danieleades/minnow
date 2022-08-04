@@ -1,5 +1,5 @@
 [package]
-name = "guppy-derive"
+name = "minnow-derive"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-arithmetic-coding = { path = "../arithmetic-coding" }
+arithmetic-coding = "0.3.0"
 darling = "0.13.2"
 num-traits = "0.2.14"
 proc-macro2 = "1.0.37"

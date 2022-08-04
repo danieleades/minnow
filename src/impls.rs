@@ -148,29 +148,6 @@ where
     type Config = T::Config;
 }
 
-impl<T> EncodeableCustom for Vec<T>
-where
-    T: EncodeableCustom,
-    T::Config: arithmetic_coding::max_length::Model,
-{
-    fn encode_with_config<W>(&self, visitor: &mut EncodeVisitor<W>, config: T::Config) -> io::Result<()>
-    where
-        W: BitWrite,
-    {
-        todo!()
-    }
-
-    fn decode_with_config<R>(visitor: &mut DecodeVisitor<R>, config: T::Config) -> io::Result<Self>
-    where
-        R: BitRead,
-        Self: Sized,
-    {
-        todo!()
-    }
-
-    type Config = T::Config;
-}
-
 #[cfg(test)]
 mod tests {
     use bitstream_io::{BigEndian, BitReader, BitWrite, BitWriter};

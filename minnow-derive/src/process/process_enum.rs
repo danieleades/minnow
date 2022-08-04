@@ -10,7 +10,7 @@ pub struct Variant {
 
 pub enum Style {
     Tuple(Tuple),
-    Struct(Struct),
+    // Struct(Struct),
     Unit,
 }
 
@@ -22,16 +22,16 @@ pub struct Tuple {
 impl Tuple {
     pub fn model(&self) -> TokenStream{
         match self.model {
-            Some(Model::Float { min, max, precision }) => quote!{ guppy::FloatModel::new( #min ..= #max, #precision ) },
-            Some(Model::String { max_length }) => quote!{ guppy::StringModel::new( #max_length ) },
+            Some(Model::Float { min, max, precision }) => quote!{ minnow::FloatModel::new( #min ..= #max, #precision ) },
+            Some(Model::String { max_length }) => quote!{ minnow::StringModel::new( #max_length ) },
             None => quote!{()},
         }
     }
 }
 
-pub struct Struct {
-    pub fields: Vec<parse::Field>,
-}
+// pub struct Struct {
+//     pub fields: Vec<parse::Field>,
+// }
 
 impl From<parse::Variant> for Variant {
     fn from(input: parse::Variant) -> Self {

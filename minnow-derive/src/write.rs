@@ -36,7 +36,7 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
                      }
                  }
             }
-            EnumStyle::Struct(_) => todo!(),
+            // EnumStyle::Struct(_) => todo!(),
             EnumStyle::Unit => {
                 quote! {
                      Self:: #ident => visitor.encode_one(model, & #symbol),
@@ -59,7 +59,7 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
                     #symbol => Ok(Self:: #ident (<#inner_ty> ::decode_with_config(visitor, #inner_model)?)),
                 }
             }
-            EnumStyle::Struct(_) => todo!(),
+            // EnumStyle::Struct(_) => todo!(),
             EnumStyle::Unit => {
                 quote! {
                     #symbol => Ok(Self:: #ident),
@@ -71,23 +71,23 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
     let ident = enum_data.ident;
 
     quote! {
-        impl guppy::EncodeableCustom for #ident {
+        impl minnow::EncodeableCustom for #ident {
             type Config = ();
-            fn encode_with_config<W>(&self, visitor: &mut guppy::EncodeVisitor<W>, _config: ()) -> std::io::Result<()>
+            fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> std::io::Result<()>
             where
                 W: bitstream_io::BitWrite {
         
-                let model = guppy::OneShot::< #len >::default();
+                let model = minnow::OneShot::< #len >::default();
                 match self {
                     #encode_block
                 }
             }
         
-            fn decode_with_config<R>(visitor: &mut guppy::DecodeVisitor<R>, _config: ()) -> std::io::Result<Self>
+            fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, _config: ()) -> std::io::Result<Self>
             where
                 R: bitstream_io::BitRead,
                 Self: Sized {
-                    let model = guppy::OneShot::< #len >::default();
+                    let model = minnow::OneShot::< #len >::default();
                     match visitor.decode_one(model)? {
                         #decode_block
                         _ => unreachable!(),
@@ -109,7 +109,7 @@ fn write_struct(struct_data: StructData) -> TokenStream {
                 }
             }).collect();
             quote! {
-                fn encode_with_config<W>(&self, visitor: &mut guppy::EncodeVisitor<W>, _config: ()) -> std::io::Result<()>
+                fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> std::io::Result<()>
                 where
                     W: bitstream_io::BitWrite,
                 {
@@ -128,7 +128,7 @@ fn write_struct(struct_data: StructData) -> TokenStream {
                 }
             }).collect();
             quote! {
-                fn encode_with_config<W>(&self, visitor: &mut guppy::EncodeVisitor<W>, _config: ()) -> std::io::Result<()>
+                fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> std::io::Result<()>
                 where
                     W: bitstream_io::BitWrite,
                 {
@@ -151,7 +151,7 @@ fn write_struct(struct_data: StructData) -> TokenStream {
             }).collect();
 
             quote! {
-                fn decode_with_config<R>(visitor: &mut guppy::DecodeVisitor<R>, config: ()) -> std::io::Result<Self>
+                fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, config: ()) -> std::io::Result<Self>
                 where
                     R: bitstream_io::BitRead,
                     Self: Sized,
@@ -173,7 +173,7 @@ fn write_struct(struct_data: StructData) -> TokenStream {
             }).collect();
 
             quote! {
-                fn decode_with_config<R>(visitor: &mut guppy::DecodeVisitor<R>, config: ()) -> std::io::Result<Self>
+                fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, config: ()) -> std::io::Result<Self>
                 where
                     R: bitstream_io::BitRead,
                     Self: Sized,
@@ -191,7 +191,7 @@ fn write_struct(struct_data: StructData) -> TokenStream {
     let generics = struct_data.generics;
 
     quote! {
-        impl guppy::EncodeableCustom for #ident #generics {
+        impl minnow::EncodeableCustom for #ident #generics {
             type Config = ();
             
             #encode_block

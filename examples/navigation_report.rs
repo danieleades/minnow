@@ -1,4 +1,4 @@
-use guppy::Encodeable;
+use minnow::Encodeable;
 
 #[derive(Debug, Encodeable)]
 pub struct NavigationReport {
@@ -28,11 +28,11 @@ fn main() {
         battery_ok: Some(true),
     };
 
-    println!("input: {:?}", input);
+    println!("input: {input:?}");
 
     let compressed = input.encode_bytes().unwrap();
-    println!("bytes: {}", compressed.len());
+    println!("bytes: {:x?}, length: {}", compressed, compressed.len());
 
     let output = NavigationReport::decode_bytes(&compressed).unwrap();
-    println!("output: {:?}", output);
+    println!("output: {output:?}");
 }

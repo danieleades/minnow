@@ -1,14 +1,16 @@
 [package]
-name = "guppy"
+name = "minnow"
 version = "0.1.0"
+description = "A library and derive macro for extremely compact encoding of structs using arithmetic coding."
 edition = "2021"
+license = "GPL-3.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-arithmetic-coding = { path = "./arithmetic-coding" }
+arithmetic-coding = "0.3.0"
 bitstream-io = "1.2.0"
-guppy-derive = { path = "guppy-derive" }
+minnow-derive = { version = "0.1.0", path = "minnow-derive" }
 num-traits = "0.2.14"
 thiserror = "1.0.30"
 

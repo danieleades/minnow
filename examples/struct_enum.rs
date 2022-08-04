@@ -1,4 +1,4 @@
-use guppy::{Encodeable, EncodeableCustom};
+use minnow::{Encodeable, EncodeableCustom};
 
 #[derive(Debug)]
 pub enum MyEnum {
@@ -13,16 +13,16 @@ pub enum MyEnum {
 }
 
 impl Encodeable for MyEnum {
-    fn encode<W>(&self, visitor: &mut guppy::EncodeVisitor<W>) -> std::io::Result<()>
+    fn encode<W>(&self, visitor: &mut minnow::EncodeVisitor<W>) -> std::io::Result<()>
     where
         W: bitstream_io::BitWrite,
     {
-        let model = guppy::OneShot::<2>::default();
+        let model = minnow::OneShot::<2>::default();
         match self {
             MyEnum::A { x, y } => {
                 visitor.encode_one(model, &0)?;
-                x.encode_with_config(visitor, guppy::FloatModel::new(-10_000.0..=10_000.0, 1))?;
-                y.encode_with_config(visitor, guppy::FloatModel::new(0.0..=5_000.0, 0))?;
+                x.encode_with_config(visitor, minnow::FloatModel::new(-10_000.0..=10_000.0, 1))?;
+                y.encode_with_config(visitor, minnow::FloatModel::new(0.0..=5_000.0, 0))?;
             }
             MyEnum::B => todo!(),
         }
@@ -30,16 +30,16 @@ impl Encodeable for MyEnum {
         Ok(())
     }
 
-    fn decode<R>(visitor: &mut guppy::DecodeVisitor<R>) -> std::io::Result<Self>
+    fn decode<R>(visitor: &mut minnow::DecodeVisitor<R>) -> std::io::Result<Self>
     where
         R: bitstream_io::BitRead,
         Self: Sized,
     {
-        let model = guppy::OneShot::<2>::default();
+        let model = minnow::OneShot::<2>::default();
         match visitor.decode_one(model)? {
             0 => {
-                let x = visitor.decode_one(guppy::FloatModel::new(-10_000.0..=10_000.0, 1))?;
-                let y = visitor.decode_one(guppy::FloatModel::new(0.0..=5_000.0, 0))?;
+                let x = visitor.decode_one(minnow::FloatModel::new(-10_000.0..=10_000.0, 1))?;
+                let y = visitor.decode_one(minnow::FloatModel::new(0.0..=5_000.0, 0))?;
                 Ok(MyEnum::A { x, y })
             }
             1 => Ok(MyEnum::B),
