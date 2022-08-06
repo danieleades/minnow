@@ -75,18 +75,3 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features --all-targets --all
-
-  # docs:
-  #   name: docs
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: stable
-  #         override: true
-  #         profile: minimal
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: doc
-  #         args: --no-deps
