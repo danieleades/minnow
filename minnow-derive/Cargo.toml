@@ -1,7 +1,12 @@
 [package]
 name = "minnow-derive"
 version = "0.1.0"
+description = "A derive macro for the Minnow library."
 edition = "2021"
+license = "GPL-3.0"
+repository = "https://github.com/danieleades/minnow"
+keywords = ["compression", "encoding", "arithmetic-coding", "lossless"]
+categories = ["compression", "encoding", "parsing"]
 
 [lib]
 proc-macro = true
