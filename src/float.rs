@@ -144,8 +144,8 @@ mod tests {
     fn probability_y() {
         let model = FloatModel::new(-10000.0..=10000.0, 1);
 
-        assert_eq!(model.probability(&2.0).unwrap(), 100020..100021);
+        assert_eq!(model.probability(&2.0).unwrap(), 100_020..100_021);
 
-        assert_eq!(model.symbol(100020), 2.0);
+        assert_eq!(model.symbol(100_020), 2.0);
     }
 }

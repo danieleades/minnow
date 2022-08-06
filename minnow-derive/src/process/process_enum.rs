@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::parse::{Model, self};
+use crate::parse::{self, Model};
 
 pub struct Variant {
     pub ident: syn::Ident,
@@ -20,11 +20,17 @@ pub struct Tuple {
 }
 
 impl Tuple {
-    pub fn model(&self) -> TokenStream{
+    pub fn model(&self) -> TokenStream {
         match self.model {
-            Some(Model::Float { min, max, precision }) => quote!{ minnow::FloatModel::new( #min ..= #max, #precision ) },
-            Some(Model::String { max_length }) => quote!{ minnow::StringModel::new( #max_length ) },
-            None => quote!{()},
+            Some(Model::Float {
+                min,
+                max,
+                precision,
+            }) => quote! { minnow::FloatModel::new( #min ..= #max, #precision ) },
+            Some(Model::String { max_length }) => {
+                quote! { minnow::StringModel::new( #max_length ) }
+            }
+            None => quote! {()},
         }
     }
 }
@@ -48,13 +54,11 @@ impl From<parse::Variant> for Variant {
                     ident: input.ident,
                     style,
                 }
-            },
+            }
             darling::ast::Style::Struct => todo!(),
-            darling::ast::Style::Unit => {
-                Variant {
-                    ident: input.ident,
-                    style: Style::Unit,
-                }
+            darling::ast::Style::Unit => Variant {
+                ident: input.ident,
+                style: Style::Unit,
             },
         }
     }

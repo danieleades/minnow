@@ -7,7 +7,7 @@ Minnow is a derive macro and convenience layer over the [Arithmetic-Coding](http
 ```rust
 use minnow::Encodeable;
 
-#[derive(Debug, Encodeable)]
+#[derive(Debug, Encodeable, PartialEq)]
 pub struct NavigationReport {
     #[encode(float(min = -10_000.0, max = 10_000.0, precision = 1))]
     pub x: f64,
@@ -19,7 +19,7 @@ pub struct NavigationReport {
     pub battery_ok: Option<bool>,
 }
 
-#[derive(Debug, Encodeable)]
+#[derive(Debug, Encodeable, PartialEq)]
 pub enum VehicleClass {
     Auv,
     Usv,
