@@ -2,8 +2,7 @@
 #![warn(clippy::pedantic)]
 #![feature(associated_type_defaults)]
 #![feature(never_type)]
-
-#![doc = include_str!("../README.md")] 
+#![doc = include_str!("../README.md")]
 
 mod bounded_model;
 mod encodeable;
