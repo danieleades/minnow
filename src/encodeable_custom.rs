@@ -1,11 +1,16 @@
 use std::io;
+
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 
-use crate::visitor::{EncodeVisitor, DecodeVisitor};
+use crate::visitor::{DecodeVisitor, EncodeVisitor};
 
 pub trait EncodeableCustom {
     type Config;
-    fn encode_with_config<W>(&self, visitor: &mut EncodeVisitor<W>, config: Self::Config) -> io::Result<()>
+    fn encode_with_config<W>(
+        &self,
+        visitor: &mut EncodeVisitor<W>,
+        config: Self::Config,
+    ) -> io::Result<()>
     where
         W: BitWrite;
 
@@ -21,7 +26,10 @@ pub trait EncodeableCustom {
         Ok(bit_writer.into_writer())
     }
 
-    fn decode_with_config<R>(visitor: &mut DecodeVisitor<R>, config: Self::Config) -> io::Result<Self>
+    fn decode_with_config<R>(
+        visitor: &mut DecodeVisitor<R>,
+        config: Self::Config,
+    ) -> io::Result<Self>
     where
         R: BitRead,
         Self: Sized;

@@ -2,7 +2,6 @@ use darling::ast;
 
 use crate::parse;
 
-
 pub struct StructData {
     pub ident: syn::Ident,
     pub generics: syn::Generics,
@@ -10,7 +9,11 @@ pub struct StructData {
 }
 
 impl StructData {
-    pub fn new(ident: syn::Ident, generics: syn::Generics, fields: ast::Fields<parse::Field>) -> Self {
+    pub fn new(
+        ident: syn::Ident,
+        generics: syn::Generics,
+        fields: ast::Fields<parse::Field>,
+    ) -> Self {
         let fields = Style::new(fields);
 
         Self {

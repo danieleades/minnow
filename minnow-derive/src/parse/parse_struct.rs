@@ -1,4 +1,4 @@
-use darling::{FromField};
+use darling::FromField;
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -13,9 +13,15 @@ pub struct Field {
 impl Field {
     pub fn model(&self) -> TokenStream {
         match self.model {
-            Some(Model::Float { min, max, precision }) => quote!{ minnow::FloatModel::new( #min ..= #max, #precision ) },
-            Some(Model::String { max_length }) => quote!{ minnow::StringModel::new( #max_length ) },
-            None => quote!{()},
+            Some(Model::Float {
+                min,
+                max,
+                precision,
+            }) => quote! { minnow::FloatModel::new( #min ..= #max, #precision ) },
+            Some(Model::String { max_length }) => {
+                quote! { minnow::StringModel::new( #max_length ) }
+            }
+            None => quote! {()},
         }
     }
 }

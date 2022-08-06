@@ -1,7 +1,11 @@
 use std::io;
+
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 
-use crate::{encodeable_custom::EncodeableCustom, visitor::{EncodeVisitor, DecodeVisitor}};
+use crate::{
+    encodeable_custom::EncodeableCustom,
+    visitor::{DecodeVisitor, EncodeVisitor},
+};
 
 pub trait Encodeable {
     fn encode<W>(&self, visitor: &mut EncodeVisitor<W>) -> io::Result<()>
@@ -36,19 +40,25 @@ pub trait Encodeable {
     }
 }
 
-impl<T, C> Encodeable for T where T: EncodeableCustom<Config = C>, C: Default {
+impl<T, C> Encodeable for T
+where
+    T: EncodeableCustom<Config = C>,
+    C: Default,
+{
     fn encode<W>(&self, visitor: &mut EncodeVisitor<W>) -> io::Result<()>
     where
-        W: BitWrite {
-            let config = C::default();
+        W: BitWrite,
+    {
+        let config = C::default();
         self.encode_with_config(visitor, config)
     }
 
     fn decode<R>(visitor: &mut DecodeVisitor<R>) -> io::Result<Self>
     where
         R: BitRead,
-        Self: Sized {
-            let config = C::default();
+        Self: Sized,
+    {
+        let config = C::default();
         Self::decode_with_config(visitor, config)
     }
 }

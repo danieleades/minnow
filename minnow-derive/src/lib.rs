@@ -2,7 +2,7 @@
 #![warn(clippy::pedantic)]
 
 use darling::FromDeriveInput;
-use proc_macro::{TokenStream};
+use proc_macro::TokenStream;
 use process::process;
 use syn::parse_macro_input;
 

@@ -3,7 +3,10 @@ use std::{io, mem::MaybeUninit};
 use bitstream_io::{BitRead, BitWrite};
 
 use self::one_shot::OneShot;
-use crate::{float::FloatModel, DecodeVisitor, EncodeVisitor, Encodeable, encodeable_custom::EncodeableCustom};
+use crate::{
+    encodeable_custom::EncodeableCustom, float::FloatModel, DecodeVisitor, EncodeVisitor,
+    Encodeable,
+};
 
 pub mod one_shot;
 
@@ -11,7 +14,13 @@ impl<T> EncodeableCustom for Option<T>
 where
     T: EncodeableCustom,
 {
-    fn encode_with_config<W>(&self, visitor: &mut EncodeVisitor<W>, config: T::Config) -> io::Result<()>
+    type Config = T::Config;
+
+    fn encode_with_config<W>(
+        &self,
+        visitor: &mut EncodeVisitor<W>,
+        config: T::Config,
+    ) -> io::Result<()>
     where
         W: BitWrite,
     {
@@ -36,8 +45,6 @@ where
             Option__::None => Ok(Option::None),
         }
     }
-
-    type Config = T::Config;
 }
 
 pub enum Option__ {
@@ -73,25 +80,34 @@ impl Encodeable for Option__ {
 }
 
 impl EncodeableCustom for f64 {
-    fn encode_with_config<W>(&self, visitor: &mut EncodeVisitor<W>, config: Self::Config) -> io::Result<()>
+    type Config = FloatModel<f64>;
+
+    fn encode_with_config<W>(
+        &self,
+        visitor: &mut EncodeVisitor<W>,
+        config: Self::Config,
+    ) -> io::Result<()>
     where
         W: BitWrite,
     {
         visitor.encode_one(config, self)
     }
 
-    fn decode_with_config<R>(visitor: &mut DecodeVisitor<R>, config: Self::Config) -> io::Result<Self>
+    fn decode_with_config<R>(
+        visitor: &mut DecodeVisitor<R>,
+        config: Self::Config,
+    ) -> io::Result<Self>
     where
         R: BitRead,
         Self: Sized,
     {
         visitor.decode_one(config)
     }
-
-    type Config = FloatModel<f64>;
 }
 
 impl EncodeableCustom for bool {
+    type Config = ();
+
     fn encode_with_config<W>(&self, visitor: &mut EncodeVisitor<W>, _config: ()) -> io::Result<()>
     where
         W: BitWrite,
@@ -113,8 +129,6 @@ impl EncodeableCustom for bool {
             _ => unreachable!(),
         }
     }
-
-    type Config = ();
 }
 
 impl<T, const N: usize> EncodeableCustom for [T; N]
@@ -122,7 +136,13 @@ where
     T: EncodeableCustom,
     T::Config: Clone,
 {
-    fn encode_with_config<W>(&self, visitor: &mut EncodeVisitor<W>, config: T::Config) -> io::Result<()>
+    type Config = T::Config;
+
+    fn encode_with_config<W>(
+        &self,
+        visitor: &mut EncodeVisitor<W>,
+        config: T::Config,
+    ) -> io::Result<()>
     where
         W: BitWrite,
     {
@@ -144,8 +164,6 @@ where
 
         Ok(array)
     }
-
-    type Config = T::Config;
 }
 
 #[cfg(test)]
@@ -153,7 +171,10 @@ mod tests {
     use bitstream_io::{BigEndian, BitReader, BitWrite, BitWriter};
     use test_case::test_case;
 
-    use crate::{float::FloatModel, DecodeVisitor, EncodeVisitor, Encodeable, encodeable_custom::EncodeableCustom};
+    use crate::{
+        encodeable_custom::EncodeableCustom, float::FloatModel, DecodeVisitor, EncodeVisitor,
+        Encodeable,
+    };
 
     #[test_case(Option::Some(true))]
     #[test_case(Option::Some(false))]
@@ -199,7 +220,9 @@ mod tests {
 
         let mut encoder = EncodeVisitor::new(32, &mut bit_writer);
 
-        input.encode_with_config(&mut encoder, config.clone()).unwrap();
+        input
+            .encode_with_config(&mut encoder, config.clone())
+            .unwrap();
         encoder.flush().unwrap();
         bit_writer.byte_align().unwrap();
         bit_writer.flush().unwrap();

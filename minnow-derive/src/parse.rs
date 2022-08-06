@@ -40,9 +40,7 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> darling::Result<Option<Model>> 
     // definitions
     let options = match encode_attrs.len() {
         0 => None,
-        1 => {
-            errors.handle(Model::from_attribute(encode_attrs[0]))
-        }
+        1 => errors.handle(Model::from_attribute(encode_attrs[0])),
         _ => {
             errors.handle(Model::from_attribute(encode_attrs[0]));
             for attr in encode_attrs.iter().skip(1) {
