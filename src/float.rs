@@ -3,7 +3,10 @@ use std::ops::{Range, RangeInclusive};
 use arithmetic_coding::one_shot;
 use num_traits::Float;
 
-#[derive(Clone)]
+/// A [`Model`](arithmetic_coding::Model) which (lossily) encodes and decodes
+/// floating point values.
+#[derive(Clone, Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct FloatModel<F>
 where
     F: Float,
@@ -28,6 +31,9 @@ impl<F> FloatModel<F>
 where
     F: Float + std::fmt::Debug,
 {
+    /// Create a new [`FloatModel`] with the given range and precision.
+    ///
+    /// Values outside this range will be cooerced.
     pub fn new(range: RangeInclusive<F>, precision: i8) -> Self {
         let model = Self {
             min: *range.start(),
@@ -67,6 +73,7 @@ where
     type ValueError = !;
 
     fn probability(&self, symbol: &Self::Symbol) -> Result<Range<Self::B>, Self::ValueError> {
+        #[allow(clippy::range_plus_one)]
         Ok(self.scale(*symbol)..self.scale(*symbol) + 1)
     }
 
@@ -130,6 +137,7 @@ mod tests {
     #[test_case(1 => 0.1)]
     #[test_case(2 => 0.2)]
     #[test_case(10 => 1.0)]
+    #[allow(clippy::float_cmp)]
     fn symbol(value: u128) -> f64 {
         let model = FloatModel {
             min: 0.0,
@@ -141,6 +149,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn probability_y() {
         let model = FloatModel::new(-10000.0..=10000.0, 1);
 

@@ -1,3 +1,5 @@
+//! Derive macro for the [Minnow](https://github.com/danieleades/minnow) crate
+
 #![deny(clippy::all, clippy::cargo)]
 #![warn(clippy::pedantic)]
 

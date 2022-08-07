@@ -2,7 +2,12 @@ use std::ops::Range;
 
 use arithmetic_coding::one_shot;
 
-#[derive(Default)]
+/// A convenience model for encoding a single symbol from a fixed set of
+/// possible symbols.
+///
+/// This model has a constant value `N` representing the total number of
+/// possible symbols.
+#[derive(Default, Debug)]
 pub struct OneShot<const N: u32>;
 
 impl<const N: u32> one_shot::Model for OneShot<N> {

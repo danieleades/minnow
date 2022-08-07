@@ -1,4 +1,10 @@
-#![deny(clippy::all, clippy::cargo)]
+#![deny(
+    clippy::all,
+    clippy::cargo,
+    missing_docs,
+    missing_copy_implementations,
+    missing_debug_implementations
+)]
 #![warn(clippy::pedantic)]
 #![feature(associated_type_defaults)]
 #![feature(never_type)]

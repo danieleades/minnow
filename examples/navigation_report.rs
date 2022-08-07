@@ -30,9 +30,9 @@ fn main() {
 
     println!("input: {input:?}");
 
-    let compressed = input.encode_bytes().unwrap();
+    let compressed = input.encode_bytes();
     println!("bytes: {:x?}, length: {}", compressed, compressed.len());
 
-    let output = NavigationReport::decode_bytes(&compressed).unwrap();
+    let output = NavigationReport::decode_bytes(&compressed);
     println!("output: {output:?}");
 }

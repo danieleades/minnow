@@ -34,8 +34,8 @@ let input = NavigationReport {
     battery_ok: Some(true),
 };
 
-let compressed = input.encode_bytes().unwrap();
-let output = NavigationReport::decode_bytes(&compressed).unwrap();
+let compressed = input.encode_bytes();
+let output = NavigationReport::decode_bytes(&compressed);
 
 assert_eq!(input, output);
 ```
@@ -44,4 +44,4 @@ Minnow was originally conceived as a library for creating compact messages for u
 
 ## Licensing
 
-This project is publicly available under the GNU General Public License v3.0. It may optionally be distibruted under the permissive MIT license by commercial arrangement.
+This project is publicly available under the GNU General Public License v3.0. It may optionally be distributed under the permissive MIT license by commercial arrangement.

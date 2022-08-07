@@ -19,9 +19,9 @@ fn main() {
 
     println!("input: {:?}", input);
 
-    let compressed = input.encode_bytes().unwrap();
+    let compressed = input.encode_bytes();
     println!("bytes: {}", compressed.len());
 
-    let output = MyNestedEnum::decode_bytes(&compressed).unwrap();
+    let output = MyNestedEnum::decode_bytes(&compressed);
     println!("output: {:?}", output);
 }

@@ -176,11 +176,11 @@ mod tests {
         Encodeable,
     };
 
-    #[test_case(Option::Some(true))]
-    #[test_case(Option::Some(false))]
-    #[test_case(true)]
-    #[test_case(false)]
-    fn round_trip<T>(input: T)
+    #[test_case(&Option::Some(true))]
+    #[test_case(&Option::Some(false))]
+    #[test_case(&true)]
+    #[test_case(&false)]
+    fn round_trip<T>(input: &T)
     where
         T: Encodeable + std::fmt::Debug + PartialEq,
     {
@@ -201,17 +201,17 @@ mod tests {
 
         let output = T::decode(&mut decoder).unwrap();
 
-        assert_eq!(input, output);
+        assert_eq!(input, &output);
     }
 
-    #[test_case(Option::Some(true), ())]
-    #[test_case(Option::Some(false), ())]
-    #[test_case(true, ())]
-    #[test_case(false, ())]
-    #[test_case(450.0_f64, FloatModel::new(-10000.0..=10000.0, 1))]
-    #[test_case(550.0_f64, FloatModel::new(-10000.0..=10000.0, 1))]
-    #[test_case(-100.0_f64, FloatModel::new(-5000.0..=0.0, 0))]
-    fn round_trip_with_config<T>(input: T, config: T::Config)
+    #[test_case(&Option::Some(true), ())]
+    #[test_case(&Option::Some(false), ())]
+    #[test_case(&true, ())]
+    #[test_case(&false, ())]
+    #[test_case(&450.0_f64, FloatModel::new(-10000.0..=10000.0, 1))]
+    #[test_case(&550.0_f64, FloatModel::new(-10000.0..=10000.0, 1))]
+    #[test_case(&-100.0_f64, FloatModel::new(-5000.0..=0.0, 0))]
+    fn round_trip_with_config<T>(input: &T, config: T::Config)
     where
         T: EncodeableCustom + std::fmt::Debug + PartialEq,
         T::Config: Clone,
@@ -235,6 +235,6 @@ mod tests {
 
         let output = T::decode_with_config(&mut decoder, config).unwrap();
 
-        assert_eq!(input, output);
+        assert_eq!(input, &output);
     }
 }
