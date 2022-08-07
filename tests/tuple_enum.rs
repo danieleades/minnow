@@ -1,6 +1,6 @@
 use minnow::Encodeable;
 
-#[derive(Debug, Encodeable)]
+#[derive(Debug, Encodeable, PartialEq)]
 pub enum MyEnum {
     #[encode(float(min = -10_000.0, max = 10_000.0, precision = 1))]
     A(f64),
@@ -8,20 +8,19 @@ pub enum MyEnum {
     B(f64),
 }
 
-#[derive(Debug, Encodeable)]
+#[derive(Debug, Encodeable, PartialEq)]
 pub enum MyNestedEnum {
     A(MyEnum),
     B(MyEnum),
 }
 
-fn main() {
+#[test]
+fn round_trip() {
     let input = MyNestedEnum::B(MyEnum::A(5.0));
 
-    println!("input: {:?}", input);
-
     let compressed = input.encode_bytes();
-    println!("bytes: {}", compressed.len());
 
     let output = MyNestedEnum::decode_bytes(&compressed);
-    println!("output: {:?}", output);
+
+    assert_eq!(input, output);
 }

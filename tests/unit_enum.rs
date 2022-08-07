@@ -1,20 +1,19 @@
 use minnow::Encodeable;
 
-#[derive(Debug, Encodeable)]
+#[derive(Debug, Encodeable, PartialEq, Eq)]
 pub enum MyEnum {
     A,
     B,
     C,
 }
 
-fn main() {
+#[test]
+fn round_trip() {
     let input = MyEnum::B;
 
-    println!("input: {:?}", input);
-
     let compressed = input.encode_bytes();
-    println!("bytes: {}", compressed.len());
 
     let output = MyEnum::decode_bytes(&compressed);
-    println!("output: {:?}", output);
+
+    assert_eq!(input, output);
 }
