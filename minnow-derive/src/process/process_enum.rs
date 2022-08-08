@@ -8,6 +8,7 @@ pub struct Variant {
     pub style: Style,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum Style {
     Tuple(Tuple),
     // Struct(Struct),
