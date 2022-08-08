@@ -13,7 +13,7 @@ proc-macro = true
 
 [dependencies]
 arithmetic-coding = "0.3.0"
-darling = "0.13.2"
+darling = "0.14.1"
 num-traits = "0.2.14"
 proc-macro2 = "1.0.37"
 quote = "1.0.17"
