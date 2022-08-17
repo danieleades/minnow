@@ -12,7 +12,7 @@ categories = ["compression", "encoding", "parsing"]
 members = [".", "minnow-derive"]
 
 [dependencies]
-arithmetic-coding = "0.3.0"
+arithmetic-coding = "0.3.1"
 bitstream-io = "1.2.0"
 minnow-derive = { version = "0.1.0", path = "minnow-derive" }
 num-traits = "0.2.14"

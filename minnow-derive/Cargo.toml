@@ -12,7 +12,7 @@ categories = ["compression", "encoding", "parsing"]
 proc-macro = true
 
 [dependencies]
-arithmetic-coding = "0.3.0"
+arithmetic-coding = "0.3.1"
 darling = "0.13.2"
 num-traits = "0.2.14"
 proc-macro2 = "1.0.37"

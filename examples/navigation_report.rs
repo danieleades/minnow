@@ -31,6 +31,8 @@ fn main() {
     println!("input: {input:?}");
 
     let compressed = input.encode_bytes();
+
+    // actual number of bits required is 52.09 bits. [DCCL](https://libdccl.org/3.0/) does it in 53.
     println!("bytes: {:x?}, length: {}", compressed, compressed.len());
 
     let output = NavigationReport::decode_bytes(&compressed);
