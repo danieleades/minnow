@@ -22,4 +22,4 @@ syn = "1.0.90"
 [dev-dependencies]
 proc-macro2 = "1.0.37"
 bitstream-io = "1.3.0"
-test-case = "2.0.2"
+test-case = "3.0.0"
