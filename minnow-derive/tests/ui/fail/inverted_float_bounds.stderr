@@ -1,0 +1,5 @@
+error: float model lower bound (10) must not exceed the upper bound (-10)
+ --> tests/ui/fail/inverted_float_bounds.rs:7:5
+  |
+7 |     #[encode(float(min = 10.0, max = -10.0, precision = 0))]
+  |     ^

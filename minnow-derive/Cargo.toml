@@ -19,5 +19,8 @@ proc-macro2 = "1.0.37"
 quote = "1.0.17"
 
 [dev-dependencies]
+bitstream-io = "2"
+minnow = { path = ".." }
 proc-macro2 = "1.0.37"
 test-case = "3.0.0"
+trybuild = "1"

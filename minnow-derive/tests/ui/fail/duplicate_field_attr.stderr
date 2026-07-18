@@ -1,0 +1,5 @@
+error: Unexpected encode attribute. Each field should have a single attribute only
+ --> tests/ui/fail/duplicate_field_attr.rs:9:5
+  |
+9 |     #[encode(float(min = 0.0, max = 2.0, precision = 0))]
+  |     ^
