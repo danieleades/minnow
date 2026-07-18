@@ -92,6 +92,35 @@ where
     }
 }
 
+impl EncodeableCustom for () {
+    type Config = ();
+
+    fn weight(_config: &Self::Config) -> Weight {
+        // A single encodable value: the unit itself.
+        Weight::ONE
+    }
+
+    fn encode_with_config<W>(&self, _visitor: &mut EncodeVisitor<W>, _config: ()) -> io::Result<()>
+    where
+        W: BitWrite,
+    {
+        // Nothing to encode: `weight() == Weight::ONE`, so `()` costs zero
+        // bits on the wire.
+        Ok(())
+    }
+
+    fn decode_with_config<R>(
+        _visitor: &mut DecodeVisitor<R>,
+        _config: (),
+    ) -> Result<Self, DecodeError>
+    where
+        R: BitRead,
+        Self: Sized,
+    {
+        Ok(())
+    }
+}
+
 impl EncodeableCustom for f64 {
     type Config = FloatModel<f64>;
 
@@ -255,6 +284,7 @@ mod tests {
     #[test_case(&Option::Some(false))]
     #[test_case(&true)]
     #[test_case(&false)]
+    #[test_case(&())]
     fn round_trip<T>(input: &T)
     where
         T: Encodeable + std::fmt::Debug + PartialEq,
@@ -283,6 +313,7 @@ mod tests {
     #[test_case(&Option::Some(false), ())]
     #[test_case(&true, ())]
     #[test_case(&false, ())]
+    #[test_case(&(), ())]
     #[test_case(&450.0_f64, FloatModel::new(-10000.0..=10000.0, 1).unwrap())]
     #[test_case(&550.0_f64, FloatModel::new(-10000.0..=10000.0, 1).unwrap())]
     #[test_case(&-100.0_f64, FloatModel::new(-5000.0..=0.0, 0).unwrap())]
@@ -311,5 +342,16 @@ mod tests {
         let output = T::decode_with_config(&mut decoder, config).unwrap();
 
         assert_eq!(input, &output);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn unit_type_costs_zero_bits() {
+        assert_eq!(<() as EncodeableCustom>::weight(&()), crate::Weight::ONE);
+        assert_eq!(<() as EncodeableCustom>::worst_case_bits(&()), 0.0);
+        // Zero payload bits still incurs coder-termination overhead, rounded
+        // up to a whole byte.
+        assert_eq!(().encode_bytes().len(), 1);
+        assert_eq!(<() as Encodeable>::size_report().total_bytes(), 1);
     }
 }
