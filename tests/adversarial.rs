@@ -102,6 +102,40 @@ fn truncated_valid_encodings_never_panic() {
 }
 
 #[test]
+fn truncations_are_rejected() {
+    // Under uniform weighting `Report` has a single exact encoded length, so the
+    // up-front length check rejects every truncation with `DecodeError::Length`
+    // rather than silently decoding a zero-padded, wrong value.
+    let report = Report {
+        x: 1234.5,
+        vehicle_class: Some(VehicleClass::Ship),
+        battery_ok: Some(false),
+    };
+    let encoded = report.encode_bytes();
+
+    assert!(
+        Report::decode_bytes(&encoded).is_ok(),
+        "full length must decode"
+    );
+
+    for len in 0..encoded.len() {
+        let err = Report::decode_bytes(&encoded[..len]).unwrap_err();
+        assert!(
+            matches!(err, minnow::DecodeError::Length { .. }),
+            "truncation to {len} bytes should be a Length error, got {err:?}",
+        );
+    }
+
+    // Trailing padding is equally impossible for the schema.
+    let mut padded = encoded.clone();
+    padded.push(0);
+    assert!(matches!(
+        Report::decode_bytes(&padded).unwrap_err(),
+        minnow::DecodeError::Length { .. }
+    ));
+}
+
+#[test]
 fn valid_round_trip_still_works() {
     // Sanity check that the fixture type round-trips, so the adversarial tests
     // are exercising a real codec.

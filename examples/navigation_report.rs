@@ -30,9 +30,15 @@ fn main() {
 
     println!("input: {input:?}");
 
+    // The worst-case size report (issue #6): a per-field breakdown of the
+    // fractional bit cost, plus the byte figure including coder termination.
+    // Weighting the optional discriminants brings this to 51.09 bits (7 bytes),
+    // one bit better than uniform discriminants would give, and beating DCCL's
+    // 53 bits. See <https://libdccl.org/3.0/>.
+    println!("\nsize report:\n{}", NavigationReport::size_report());
+
     let compressed = input.encode_bytes();
 
-    // actual number of bits required is 52.09 bits. [DCCL](https://libdccl.org/3.0/) does it in 53.
     println!("bytes: {:x?}, length: {}", compressed, compressed.len());
 
     let output = NavigationReport::decode_bytes(&compressed).expect("round-trip should succeed");
