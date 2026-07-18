@@ -59,6 +59,15 @@ pub enum Model {
     String {
         max_length: usize,
     },
+    /// `#[encode(config = <expr>)]` — an arbitrary Rust expression evaluated
+    /// as the field's runtime config. This is the escape hatch every other
+    /// attribute form is sugar for (see [`Model::config_tokens`]); it accepts
+    /// any expression, so it **cannot** be validated at macro-expansion time.
+    /// An invalid or mistyped expression surfaces as an ordinary compile
+    /// error at its interpolation site (e.g. a type mismatch against
+    /// `<FieldType as EncodeableCustom>::Config`) rather than a clean
+    /// macro-time diagnostic.
+    Config(syn::Expr),
 }
 
 impl Model {
@@ -86,7 +95,13 @@ impl Model {
             Some(Self::String { max_length }) => {
                 quote! { minnow::StringModel::new( #max_length ) }
             }
-            None => quote! {()},
+            Some(Self::Config(expr)) => quote! { #expr },
+            // Fall back to `Default::default()` rather than a literal `()` so
+            // that a field whose type is a generic parameter with a
+            // non-`()` `Config` (constrained by a `Default` bound the derive
+            // adds — see `write.rs`) still works, not just concrete types
+            // that happen to use `Config = ()`.
+            None => quote! { ::core::default::Default::default() },
         }
     }
 

@@ -31,7 +31,10 @@ pub enum Style {
 }
 
 impl Style {
-    fn new(fields: ast::Fields<parse::Field>) -> Self {
+    /// Lower a set of parsed fields to their [`Style`] — also used for an
+    /// enum variant's payload fields, which are treated as an anonymous
+    /// product exactly like a struct's (see `process_enum.rs`).
+    pub(crate) fn new(fields: ast::Fields<parse::Field>) -> Self {
         match fields.style {
             ast::Style::Tuple => Self::Tuple(fields.fields),
             ast::Style::Struct => Self::Struct(fields.fields),

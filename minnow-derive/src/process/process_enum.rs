@@ -1,67 +1,30 @@
 use darling::export::syn;
-use proc_macro2::TokenStream;
 
-use crate::parse::{self, Model};
+use crate::{parse, process::StructStyle};
 
 pub struct Variant {
     pub ident: syn::Ident,
-    pub style: Style,
+    /// The variant's payload, treated exactly like an anonymous struct's
+    /// fields — a unit variant has [`StructStyle::Unit`], a tuple variant
+    /// [`StructStyle::Tuple`], a struct variant [`StructStyle::Struct`].
+    pub style: StructStyle,
     /// A manual `#[encode(weight = N)]` discriminant weight, overriding the
     /// automatic (payload-cardinality) weight for this variant.
     pub weight_override: Option<u128>,
 }
 
-#[allow(clippy::large_enum_variant)]
-pub enum Style {
-    Tuple(Tuple),
-    // Struct(Struct),
-    Unit,
-}
-
-pub struct Tuple {
-    pub ty: syn::Type,
-    pub model: Option<Model>,
-}
-
-impl Tuple {
-    pub fn model(&self) -> TokenStream {
-        Model::config_tokens(self.model.as_ref())
-    }
-}
-
-// pub struct Struct {
-//     pub fields: Vec<parse::Field>,
-// }
-
 impl From<parse::Variant> for Variant {
     fn from(input: parse::Variant) -> Self {
-        let weight_override = input.weight;
-        match input.fields.style {
-            darling::ast::Style::Tuple => {
-                let tuple = Tuple {
-                    ty: input.fields.fields[0].ty.clone(),
-                    model: input.options,
-                };
-
-                let style = Style::Tuple(tuple);
-
-                Variant {
-                    ident: input.ident,
-                    style,
-                    weight_override,
-                }
-            }
-            darling::ast::Style::Struct => todo!(),
-            darling::ast::Style::Unit => Variant {
-                ident: input.ident,
-                style: Style::Unit,
-                weight_override,
-            },
+        Self {
+            ident: input.ident,
+            style: StructStyle::new(input.fields),
+            weight_override: input.weight,
         }
     }
 }
 
 pub struct EnumData {
     pub ident: syn::Ident,
+    pub generics: syn::Generics,
     pub variants: Vec<Variant>,
 }
