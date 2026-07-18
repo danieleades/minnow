@@ -2,19 +2,42 @@ use std::io;
 
 use bitstream_io::{BitRead, BitWrite};
 
-use self::one_shot::OneShot;
+use self::{one_shot::OneShot, weighted::WeightedModel};
 use crate::{
-    DecodeError, DecodeVisitor, EncodeVisitor, Encodeable, encodeable_custom::EncodeableCustom,
-    float::FloatModel,
+    DecodeError, DecodeVisitor, EncodeVisitor, SizeReport, Weight,
+    encodeable_custom::EncodeableCustom, float::FloatModel,
 };
 
 pub mod one_shot;
+pub mod weighted;
 
 impl<T> EncodeableCustom for Option<T>
 where
     T: EncodeableCustom,
 {
     type Config = T::Config;
+
+    fn weight(config: &Self::Config) -> Weight {
+        // Sum rule: `None` contributes one value, `Some(x)` contributes `W(T)`.
+        Weight::ONE + T::weight(config)
+    }
+
+    fn worst_case_bits(config: &Self::Config) -> f64 {
+        // Discriminant widths `{None: 1, Some: W(T)}`. Under exact weighting
+        // both variants cost `log₂(1 + W(T))`; the max also stays correct if
+        // the discriminant is rescaled.
+        let model = WeightedModel::new([1, T::weight(config).get()]);
+        let none_bits = model.discriminant_bits(0);
+        let some_bits = model.discriminant_bits(1) + T::worst_case_bits(config);
+        none_bits.max(some_bits)
+    }
+
+    fn best_case_bits(config: &Self::Config) -> f64 {
+        let model = WeightedModel::new([1, T::weight(config).get()]);
+        let none_bits = model.discriminant_bits(0);
+        let some_bits = model.discriminant_bits(1) + T::best_case_bits(config);
+        none_bits.min(some_bits)
+    }
 
     fn encode_with_config<W>(
         &self,
@@ -24,12 +47,16 @@ where
     where
         W: BitWrite,
     {
+        // Wire order: `None = 0`, `Some = 1`. Interval widths are proportional
+        // to each variant's payload weight, so every value of `Option<T>` costs
+        // exactly `log₂(1 + W(T))` bits.
+        let model = WeightedModel::new([1, T::weight(&config).get()]);
         match self {
             Some(x) => {
-                OptionDiscriminant::Some.encode(visitor)?;
+                visitor.encode_one(model, &1_u32)?;
                 x.encode_with_config(visitor, config)
             }
-            None => OptionDiscriminant::None.encode(visitor),
+            None => visitor.encode_one(model, &0_u32),
         }
     }
 
@@ -40,49 +67,13 @@ where
     where
         R: BitRead,
     {
-        match OptionDiscriminant::decode(visitor)? {
-            OptionDiscriminant::Some => {
+        let model = WeightedModel::new([1, T::weight(&config).get()]);
+        match visitor.decode_one(model)? {
+            0 => Ok(Option::None),
+            1 => {
                 let x = T::decode_with_config(visitor, config)?;
                 Ok(Some(x))
             }
-            OptionDiscriminant::None => Ok(Option::None),
-        }
-    }
-}
-
-/// The wire discriminant for [`Option`], encoded before any payload.
-///
-/// The wire order is `None = 0`, `Some = 1`.
-#[derive(Debug, Clone, Copy)]
-pub enum OptionDiscriminant {
-    /// Corresponds to [`Option::None`].
-    None,
-    /// Corresponds to [`Option::Some`].
-    Some,
-}
-
-impl Encodeable for OptionDiscriminant {
-    fn encode<W>(&self, visitor: &mut EncodeVisitor<W>) -> io::Result<()>
-    where
-        W: BitWrite,
-    {
-        let value = match self {
-            OptionDiscriminant::None => 0,
-            OptionDiscriminant::Some => 1,
-        };
-        let model = OneShot::<2>;
-        visitor.encode_one(model, &value)
-    }
-
-    fn decode<R>(visitor: &mut DecodeVisitor<R>) -> Result<Self, DecodeError>
-    where
-        R: BitRead,
-        Self: Sized,
-    {
-        let model = OneShot::<2>;
-        match visitor.decode_one(model)? {
-            0 => Ok(OptionDiscriminant::None),
-            1 => Ok(OptionDiscriminant::Some),
             other => Err(DecodeError::InvalidSymbol {
                 symbol: u128::from(other),
             }),
@@ -92,6 +83,10 @@ impl Encodeable for OptionDiscriminant {
 
 impl EncodeableCustom for f64 {
     type Config = FloatModel<f64>;
+
+    fn weight(config: &Self::Config) -> Weight {
+        Weight::new(config.denominator())
+    }
 
     fn encode_with_config<W>(
         &self,
@@ -118,6 +113,10 @@ impl EncodeableCustom for f64 {
 
 impl EncodeableCustom for bool {
     type Config = ();
+
+    fn weight(_config: &Self::Config) -> Weight {
+        Weight::new(2)
+    }
 
     fn encode_with_config<W>(&self, visitor: &mut EncodeVisitor<W>, _config: ()) -> io::Result<()>
     where
@@ -153,6 +152,34 @@ where
     T::Config: Clone,
 {
     type Config = T::Config;
+
+    fn weight(config: &Self::Config) -> Weight {
+        // Product rule: `W([T; N]) = W(T)^N`.
+        #[allow(clippy::cast_possible_truncation)]
+        let exp = N as u32;
+        T::weight(config).pow(exp)
+    }
+
+    fn worst_case_bits(config: &Self::Config) -> f64 {
+        // Sum the per-element cost in `f64`, which stays exact even when the
+        // weight product saturates.
+        #[allow(clippy::cast_precision_loss)]
+        let n = N as f64;
+        n * T::worst_case_bits(config)
+    }
+
+    fn best_case_bits(config: &Self::Config) -> f64 {
+        #[allow(clippy::cast_precision_loss)]
+        let n = N as f64;
+        n * T::best_case_bits(config)
+    }
+
+    fn report(config: &Self::Config) -> SizeReport {
+        let children = (0..N)
+            .map(|i| T::report(config).with_name(i.to_string()))
+            .collect();
+        SizeReport::product(children)
+    }
 
     fn encode_with_config<W>(
         &self,

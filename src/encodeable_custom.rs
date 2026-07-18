@@ -3,7 +3,7 @@ use std::io;
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 
 use crate::{
-    DecodeError, PRECISION,
+    DecodeError, PRECISION, SizeReport, Weight,
     visitor::{DecodeVisitor, EncodeVisitor},
 };
 
@@ -17,6 +17,53 @@ use crate::{
 pub trait EncodeableCustom {
     /// The type of the configuration used to customise the encoding/decoding.
     type Config;
+
+    /// The number of distinct values this type can encode under `config` — its
+    /// [`Weight`].
+    ///
+    /// This is the cardinality of the value set: the product of field weights
+    /// for structs/arrays, the sum of variant weights for enums/[`Option`], and
+    /// the model denominator for leaves. See [`Weight`] for the semiring this
+    /// belongs to.
+    fn weight(config: &Self::Config) -> Weight;
+
+    /// The worst-case number of bits needed to encode any value of this type
+    /// under `config`.
+    ///
+    /// The default is `log₂` of the [`weight`](EncodeableCustom::weight), which
+    /// is exact for uniform leaves and for sums/products whose weight has not
+    /// saturated. Containers override this to accumulate `f64` bit counts
+    /// directly (sum over fields; max over enum variants), which stays accurate
+    /// even when the weight product saturates — see [`crate::SizeReport`].
+    fn worst_case_bits(config: &Self::Config) -> f64 {
+        Self::weight(config).log2()
+    }
+
+    /// The *best*-case number of bits — the size of the cheapest value of this
+    /// type under `config`.
+    ///
+    /// The dual of [`worst_case_bits`](EncodeableCustom::worst_case_bits): a
+    /// sum over fields but a **min** over enum variants. For uniform
+    /// (automatic) weighting every value costs the same, so this equals
+    /// `worst_case_bits`; with manual `#[encode(weight = …)]` overrides the
+    /// cheapest and dearest values differ, and this is the lower one.
+    ///
+    /// It is used to bound the encoded length from below when validating input
+    /// on decode (see [`crate::DecodeError::Length`]); the default matches the
+    /// uniform-leaf case.
+    fn best_case_bits(config: &Self::Config) -> f64 {
+        Self::weight(config).log2()
+    }
+
+    /// A [`SizeReport`] tree describing the worst-case encoded size of this
+    /// type under `config`.
+    ///
+    /// The default is an unnamed leaf carrying
+    /// [`worst_case_bits`](EncodeableCustom::worst_case_bits); containers
+    /// override it to expose a per-field / per-variant breakdown.
+    fn report(config: &Self::Config) -> SizeReport {
+        SizeReport::leaf(Self::worst_case_bits(config))
+    }
 
     /// Encode the struct using the provided configuration and
     /// [`EncodeVisitor`].
@@ -76,18 +123,38 @@ pub trait EncodeableCustom {
 
     /// Decode the struct from a `[u8]` using the provided configuration.
     ///
+    /// The input length is validated against the schema *before* decoding: a
+    /// slice outside the schema's length window (see
+    /// [`DecodeError::Length`]) is rejected without the arithmetic decoder ever
+    /// running. This catches truncation, which the decoder would otherwise mask
+    /// by zero-padding the exhausted stream.
+    ///
     /// # Errors
     ///
-    /// Returns a [`DecodeError`] if the underlying reader fails or a decoded
-    /// symbol falls outside its model. Truncated or corrupted input may
-    /// decode to `Ok` with a wrong value instead of an error — see
+    /// Returns [`DecodeError::Length`] if the input cannot be a valid encoding
+    /// of this schema, [`DecodeError::Io`] if the reader fails, or
+    /// [`DecodeError::InvalidSymbol`] if a decoded symbol falls outside its
+    /// model. A length-valid but internally corrupt stream may still decode to
+    /// `Ok` with a wrong value — see
     /// [`Encodeable::decode_bytes`](crate::Encodeable::decode_bytes) for the
-    /// integrity caveats. This
-    /// method never panics, regardless of the input.
+    /// residual integrity caveats. This method never panics, regardless of the
+    /// input.
     fn decode_bytes_with_config(bytes: &[u8], config: Self::Config) -> Result<Self, DecodeError>
     where
         Self: Sized,
     {
+        // Every value of the schema encodes to a length in
+        // `[ceil(best_case_bits / 8), total_bytes]`. For uniform (automatic)
+        // weighting the two ends coincide, pinning the length exactly and
+        // catching truncation; manual `#[encode(weight)]` overrides widen the
+        // window but it still never rejects a genuinely valid encoding.
+        let expected = Self::report(&config).total_bytes();
+        let lower = crate::report::bytes_for(Self::best_case_bits(&config));
+        let actual = bytes.len();
+        if actual < lower || actual > expected {
+            return Err(DecodeError::Length { expected, actual });
+        }
+
         let bit_reader = BitReader::endian(bytes, BigEndian);
         let mut decoder = DecodeVisitor::new(PRECISION, bit_reader);
 

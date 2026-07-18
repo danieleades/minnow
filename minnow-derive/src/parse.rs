@@ -110,6 +110,76 @@ impl Model {
     }
 }
 
+/// Parse the `#[encode(...)]` attributes on an enum *variant*.
+///
+/// A variant may carry an optional payload [`Model`] (as for a struct field)
+/// and/or an optional manual discriminant `#[encode(weight = N)]` override. The
+/// two are distinguished by shape: `weight = N` is a name/value pair,
+/// everything else is a model. Keeping this separate from [`parse_attributes`]
+/// leaves struct-field parsing untouched; full attribute unification is
+/// deferred.
+fn parse_variant_attributes(
+    attrs: &[syn::Attribute],
+) -> darling::Result<(Option<Model>, Option<u128>)> {
+    let mut errors = darling::Error::accumulator();
+    let mut model: Option<Model> = None;
+    let mut weight: Option<u128> = None;
+
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("encode")) {
+        // `#[encode(weight = N)]` parses as a single name/value pair; anything
+        // else (e.g. `float(...)`) does not, and falls through to `Model`.
+        if let Ok(name_value) = attr.parse_args::<syn::MetaNameValue>() {
+            if name_value.path.is_ident("weight") {
+                match parse_u128_literal(&name_value.value) {
+                    Ok(value) => {
+                        if value < 1 {
+                            errors
+                                .push(Error::custom("`weight` must be at least 1").with_span(attr));
+                        }
+                        if weight.is_some() {
+                            errors.push(
+                                Error::custom("duplicate `weight` attribute").with_span(attr),
+                            );
+                        }
+                        weight = Some(value);
+                    }
+                    Err(e) => errors.push(e.with_span(attr)),
+                }
+                continue;
+            }
+        }
+
+        if model.is_some() {
+            errors.push(Error::custom("duplicate payload model attribute").with_span(attr));
+        }
+        if let Some(parsed) = errors.handle(Model::from_attribute(attr)) {
+            if let Err(message) = parsed.validate() {
+                errors.push(Error::custom(message).with_span(attr));
+            }
+            model = Some(parsed);
+        }
+    }
+
+    errors.finish()?;
+
+    Ok((model, weight))
+}
+
+/// Parse a non-negative integer literal from an attribute value expression.
+fn parse_u128_literal(expr: &syn::Expr) -> darling::Result<u128> {
+    if let syn::Expr::Lit(syn::ExprLit {
+        lit: syn::Lit::Int(int),
+        ..
+    }) = expr
+    {
+        int.base10_parse::<u128>().map_err(Error::from)
+    } else {
+        Err(Error::custom(
+            "`weight` must be an unsigned integer literal",
+        ))
+    }
+}
+
 fn parse_attributes(attrs: &[syn::Attribute]) -> darling::Result<Option<Model>> {
     let mut errors = darling::Error::accumulator();
 

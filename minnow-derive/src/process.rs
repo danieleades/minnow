@@ -3,7 +3,7 @@ use crate::parse;
 mod process_enum;
 use process_enum::Variant;
 mod process_struct;
-pub use process_enum::{EnumData, Style as EnumStyle};
+pub use process_enum::{EnumData, Style as EnumStyle, Variant as EnumVariant};
 pub use process_struct::{StructData, Style as StructStyle};
 
 pub fn process(receiver: parse::Receiver) -> Data {

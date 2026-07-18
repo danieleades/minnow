@@ -3,7 +3,7 @@ use std::io;
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 
 use crate::{
-    DecodeError, PRECISION,
+    DecodeError, PRECISION, SizeReport,
     encodeable_custom::EncodeableCustom,
     visitor::{DecodeVisitor, EncodeVisitor},
 };
@@ -24,6 +24,38 @@ pub trait Encodeable {
     fn encode<W>(&self, visitor: &mut EncodeVisitor<W>) -> io::Result<()>
     where
         W: BitWrite;
+
+    /// The worst-case number of bits needed to encode any value of this type,
+    /// using its [`Default`] configuration.
+    ///
+    /// Under Minnow's uniform weighting this is the *exact* fractional size of
+    /// every value; see [`crate::SizeReport`].
+    ///
+    /// The default implementation reads it off
+    /// [`size_report`](Encodeable::size_report); the blanket implementation
+    /// over [`EncodeableCustom`] overrides both.
+    #[must_use]
+    fn worst_case_bits() -> f64
+    where
+        Self: Sized,
+    {
+        Self::size_report().total_bits()
+    }
+
+    /// A [`SizeReport`] describing the worst-case encoded size of this type,
+    /// using its [`Default`] configuration.
+    ///
+    /// The default implementation returns an empty leaf; the blanket
+    /// implementation over [`EncodeableCustom`] overrides it with the real
+    /// per-field breakdown. (Hand-written [`Encodeable`] impls that want an
+    /// accurate report should override this.)
+    #[must_use]
+    fn size_report() -> SizeReport
+    where
+        Self: Sized,
+    {
+        SizeReport::leaf(0.0)
+    }
 
     /// Encode the struct into a [`Vec<u8>`].
     ///
@@ -71,13 +103,16 @@ pub trait Encodeable {
     ///
     /// # Integrity
     ///
-    /// Arithmetic-coded streams are not self-delimiting or self-validating:
-    /// almost every byte string decodes to *some* syntactically valid value,
-    /// and missing trailing bits are indistinguishable from the zero padding
-    /// a legitimate stream ends with. Truncated or corrupted input may
-    /// therefore decode to `Ok` with a wrong value rather than an error.
-    /// Callers that need integrity must add outer framing (an explicit
-    /// length and/or checksum) around the encoded bytes.
+    /// The blanket implementation over [`EncodeableCustom`] validates the input
+    /// length against the schema before decoding (returning
+    /// [`DecodeError::Length`] on a mismatch), which rejects truncated input
+    /// that the arithmetic decoder would otherwise mask by zero-padding. This
+    /// default implementation — used only by hand-written [`Encodeable`] impls
+    /// — does **not**: arithmetic-coded streams are not self-delimiting, so
+    /// almost every byte string of a plausible length decodes to *some* valid
+    /// value. Even with the length check, a corrupt-but-correctly-sized stream
+    /// can decode to `Ok` with a wrong value. Callers that need full integrity
+    /// must add outer framing (a checksum) around the encoded bytes.
     fn decode_bytes(bytes: &[u8]) -> Result<Self, DecodeError>
     where
         Self: Sized,
@@ -102,6 +137,14 @@ where
         self.encode_with_config(visitor, config)
     }
 
+    fn worst_case_bits() -> f64 {
+        <T as EncodeableCustom>::worst_case_bits(&C::default())
+    }
+
+    fn size_report() -> SizeReport {
+        <T as EncodeableCustom>::report(&C::default())
+    }
+
     fn decode<R>(visitor: &mut DecodeVisitor<R>) -> Result<Self, DecodeError>
     where
         R: BitRead,
@@ -109,5 +152,11 @@ where
     {
         let config = C::default();
         Self::decode_with_config(visitor, config)
+    }
+
+    fn decode_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
+        // Route through the config-aware path so the up-front schema length
+        // check (see `DecodeError::Length`) applies to derived types too.
+        Self::decode_bytes_with_config(bytes, C::default())
     }
 }

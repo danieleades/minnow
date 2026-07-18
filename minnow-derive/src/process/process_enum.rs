@@ -6,6 +6,9 @@ use crate::parse::{self, Model};
 pub struct Variant {
     pub ident: syn::Ident,
     pub style: Style,
+    /// A manual `#[encode(weight = N)]` discriminant weight, overriding the
+    /// automatic (payload-cardinality) weight for this variant.
+    pub weight_override: Option<u128>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -45,6 +48,7 @@ impl Tuple {
 
 impl From<parse::Variant> for Variant {
     fn from(input: parse::Variant) -> Self {
+        let weight_override = input.weight;
         match input.fields.style {
             darling::ast::Style::Tuple => {
                 let tuple = Tuple {
@@ -57,12 +61,14 @@ impl From<parse::Variant> for Variant {
                 Variant {
                     ident: input.ident,
                     style,
+                    weight_override,
                 }
             }
             darling::ast::Style::Struct => todo!(),
             darling::ast::Style::Unit => Variant {
                 ident: input.ident,
                 style: Style::Unit,
+                weight_override,
             },
         }
     }

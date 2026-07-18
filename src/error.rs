@@ -22,4 +22,29 @@ pub enum DecodeError {
         /// The offending symbol value.
         symbol: u128,
     },
+
+    /// The input length is impossible for the schema.
+    ///
+    /// Under Minnow's uniform (automatic) weighting every value of a schema
+    /// encodes to the same number of bytes, so the valid length is pinned to a
+    /// window at most one byte wide — from `ceil(best_case_bits / 8)` up to
+    /// [`SizeReport::total_bytes`]. An input outside that window is truncated,
+    /// padded, or belongs to a different schema. Length is validated up front
+    /// (before decoding) because the arithmetic decoder silently zero-pads
+    /// exhausted input, which would otherwise let a truncated message decode to
+    /// a plausible-but-wrong value.
+    ///
+    /// Manual `#[encode(weight = …)]` overrides make weighting non-uniform, so
+    /// values vary in length and the window widens accordingly; the check still
+    /// never rejects a genuinely valid encoding.
+    ///
+    /// [`SizeReport::total_bytes`]: crate::SizeReport::total_bytes
+    #[error("input is {actual} bytes but the schema requires at most {expected}")]
+    Length {
+        /// The maximum number of bytes a value of this schema can occupy
+        /// ([`SizeReport::total_bytes`](crate::SizeReport::total_bytes)).
+        expected: usize,
+        /// The number of bytes actually supplied.
+        actual: usize,
+    },
 }

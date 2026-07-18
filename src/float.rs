@@ -114,6 +114,17 @@ where
         Ok(model)
     }
 
+    /// The number of distinct values this model can encode — its
+    /// [`Weight`](crate::Weight).
+    ///
+    /// This is the model's denominator: `round((max - min) · 10^precision) +
+    /// 1`. It is guaranteed by [`FloatModel::new`] to be at most
+    /// [`MAX_DENOMINATOR`](crate::MAX_DENOMINATOR).
+    #[must_use]
+    pub fn denominator(&self) -> u128 {
+        self.scale(self.max) + 1
+    }
+
     fn multiplier(&self) -> F {
         F::from(10_u32).unwrap().powi(self.precision.into())
     }
@@ -144,7 +155,7 @@ where
     }
 
     fn max_denominator(&self) -> Self::B {
-        self.scale(self.max) + 1
+        self.denominator()
     }
 
     fn symbol(&self, value: Self::B) -> Self::Symbol {
