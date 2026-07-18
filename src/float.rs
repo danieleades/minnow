@@ -6,37 +6,7 @@ use std::{
 use arithmetic_coding::one_shot;
 use num_traits::Float;
 
-use crate::MAX_DENOMINATOR;
-
-/// An error returned when a model cannot be constructed because its parameters
-/// violate the arithmetic coder's precision invariant (see
-/// [`MAX_DENOMINATOR`](crate::MAX_DENOMINATOR)) or are otherwise invalid.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[non_exhaustive]
-pub enum ModelError {
-    /// One or both of the supplied bounds was `NaN` or infinite.
-    #[error("model bounds must be finite (neither NaN nor infinite)")]
-    NonFiniteBounds,
-
-    /// The lower bound was greater than the upper bound.
-    #[error("model lower bound must not exceed the upper bound")]
-    InvertedBounds,
-
-    /// The resulting denominator exceeds
-    /// [`MAX_DENOMINATOR`](crate::MAX_DENOMINATOR).
-    #[error(
-        "model denominator ({denominator}) exceeds the maximum ({max}) permitted at precision \
-         {precision}; narrow the range or reduce the precision"
-    )]
-    DenominatorTooLarge {
-        /// The denominator that was requested.
-        denominator: u128,
-        /// The maximum permissible denominator.
-        max: u128,
-        /// The arithmetic coder precision in bits.
-        precision: u32,
-    },
-}
+use crate::{MAX_DENOMINATOR, ModelError};
 
 /// A [`Model`](arithmetic_coding::Model) which (lossily) encodes and decodes
 /// floating point values.
@@ -170,8 +140,8 @@ mod tests {
     use arithmetic_coding::fixed_length::Model;
     use test_case::test_case;
 
-    use super::{FloatModel, ModelError};
-    use crate::MAX_DENOMINATOR;
+    use super::FloatModel;
+    use crate::{MAX_DENOMINATOR, ModelError};
 
     #[test]
     fn denominator() {

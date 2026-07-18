@@ -47,4 +47,14 @@ pub enum DecodeError {
         /// The number of bytes actually supplied.
         actual: usize,
     },
+
+    /// The decoded byte sequence for a [`String`] field was not valid UTF-8.
+    ///
+    /// [`String`]'s wire format (see [`crate::StringModel`]) is a bounded
+    /// sequence of raw bytes; any byte value round-trips, but not every byte
+    /// sequence is valid UTF-8. A corrupt or malicious stream can decode to a
+    /// byte sequence that isn't, which this variant reports rather than
+    /// panicking on the `unwrap` a naive implementation might reach for.
+    #[error("decoded bytes are not valid UTF-8: {0}")]
+    InvalidUtf8(#[from] std::string::FromUtf8Error),
 }
