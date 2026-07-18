@@ -65,8 +65,19 @@ pub trait Encodeable {
     ///
     /// # Errors
     ///
-    /// Returns a [`DecodeError`] if the bytes are truncated or corrupt. This
-    /// method never panics, regardless of the input.
+    /// Returns a [`DecodeError`] if the underlying reader fails or a decoded
+    /// symbol falls outside its model. This method never panics, regardless
+    /// of the input.
+    ///
+    /// # Integrity
+    ///
+    /// Arithmetic-coded streams are not self-delimiting or self-validating:
+    /// almost every byte string decodes to *some* syntactically valid value,
+    /// and missing trailing bits are indistinguishable from the zero padding
+    /// a legitimate stream ends with. Truncated or corrupted input may
+    /// therefore decode to `Ok` with a wrong value rather than an error.
+    /// Callers that need integrity must add outer framing (an explicit
+    /// length and/or checksum) around the encoded bytes.
     fn decode_bytes(bytes: &[u8]) -> Result<Self, DecodeError>
     where
         Self: Sized,

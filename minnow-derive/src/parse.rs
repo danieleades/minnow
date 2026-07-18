@@ -81,16 +81,26 @@ impl Model {
                     "float model lower bound ({min}) must not exceed the upper bound ({max})"
                 ));
             }
+            // This must mirror `FloatModel::new` exactly (same f64 arithmetic,
+            // then the same *integer* comparison) so that anything accepted
+            // here is also accepted at runtime. Comparing in f64 instead would
+            // disagree near the boundary, where `steps + 1.0` rounds back to
+            // `MAX_DENOMINATOR`.
             let multiplier = 10_f64.powi(i32::from(*precision));
             let steps = ((max - min) * multiplier).round();
-            #[allow(clippy::cast_precision_loss)]
-            let max_denominator = MAX_DENOMINATOR as f64;
-            // denominator = steps + 1
-            if !steps.is_finite() || steps + 1.0 > max_denominator {
+            let steps = num_traits::ToPrimitive::to_u128(&steps).ok_or_else(|| {
+                format!(
+                    "float model denominator exceeds the maximum ({MAX_DENOMINATOR}) permitted at \
+                     precision 64; narrow the range or reduce the precision"
+                )
+            })?;
+            // `denominator = steps + 1`; reject before the `+ 1` can overflow
+            // or exceed the bound.
+            if steps >= MAX_DENOMINATOR {
                 return Err(format!(
                     "float model denominator ({}) exceeds the maximum ({MAX_DENOMINATOR}) \
                      permitted at precision 64; narrow the range or reduce the precision",
-                    steps + 1.0
+                    steps.saturating_add(1)
                 ));
             }
         }
@@ -183,5 +193,23 @@ mod tests {
     fn parse(tokens: TokenStream) {
         let parsed = syn::parse_str(&tokens.to_string()).unwrap();
         let _receiver = Receiver::from_derive_input(&parsed).unwrap();
+    }
+
+    /// The macro-time bounds check must agree with `FloatModel::new` exactly
+    /// at the `MAX_DENOMINATOR` boundary: `steps + 1.0` rounds back to
+    /// `2^62` in `f64`, so an `f64` comparison would accept a model that the
+    /// runtime constructor rejects, turning the generated
+    /// `.expect("validated at compile time")` into a runtime panic.
+    #[test_case(4_611_686_018_427_387_904.0 => false; "steps of two to the sixty-two is rejected")]
+    #[test_case(4_611_686_018_427_387_392.0 => true; "largest f64 below the boundary is accepted")]
+    #[test_case(9_223_372_036_854_775_808.0 => false; "well past the boundary is rejected")]
+    fn boundary_agrees_with_runtime(max: f64) -> bool {
+        use super::{Model, Number};
+        let model = Model::Float {
+            min: Number(0.0),
+            max: Number(max),
+            precision: Number(0),
+        };
+        model.validate().is_ok()
     }
 }

@@ -108,8 +108,13 @@ where
     /// # Errors
     ///
     /// Returns [`DecodeError::Io`] if the underlying reader fails, or
-    /// [`DecodeError::InvalidSymbol`] if the stream is exhausted where a symbol
-    /// was expected (a corrupt or truncated stream).
+    /// [`DecodeError::InvalidSymbol`] if the decoder yields no symbol.
+    ///
+    /// Note that a truncated stream does *not* reliably produce an error: the
+    /// decoder treats missing bits as zeros (legitimate streams end in
+    /// implicit zero padding), so truncated input may decode to a wrong value.
+    /// Integrity requires outer framing; see
+    /// [`Encodeable::decode_bytes`](crate::Encodeable::decode_bytes).
     ///
     /// # Panics
     ///

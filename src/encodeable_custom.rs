@@ -78,7 +78,11 @@ pub trait EncodeableCustom {
     ///
     /// # Errors
     ///
-    /// Returns a [`DecodeError`] if the bytes are truncated or corrupt. This
+    /// Returns a [`DecodeError`] if the underlying reader fails or a decoded
+    /// symbol falls outside its model. Truncated or corrupted input may
+    /// decode to `Ok` with a wrong value instead of an error — see
+    /// [`Encodeable::decode_bytes`](crate::Encodeable::decode_bytes) for the
+    /// integrity caveats. This
     /// method never panics, regardless of the input.
     fn decode_bytes_with_config(bytes: &[u8], config: Self::Config) -> Result<Self, DecodeError>
     where

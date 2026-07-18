@@ -14,6 +14,7 @@ proc-macro = true
 
 [dependencies]
 darling = "0.20"
+num-traits = "0.2"
 proc-macro2 = "1.0.37"
 quote = "1.0.17"
 syn = "2"
