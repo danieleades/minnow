@@ -66,19 +66,45 @@ pub const PRECISION: u32 = 64;
 ///
 /// # The invariant
 ///
-/// The arithmetic coder renormalises its working interval so its width stays
-/// within `[2^(P-2), 2^P]`. For every symbol to map to a *distinct*, non-empty
-/// sub-interval after scaling by `probability / denominator`, and — more
-/// stringently — for the internal `range * denominator` product to fit in the
-/// `u128` state (see [`PRECISION`]), the denominator is capped at
+/// This is `arithmetic-coding`'s own guard, restated: the coder computes
+/// `frequency_bits = floor(log2(denominator)) + 1` and requires
 ///
 /// ```text
-/// D = 2^(PRECISION - 2) = 2^62 = 4_611_686_018_427_387_904
+/// PRECISION >= frequency_bits + 2
 /// ```
 ///
-/// At `PRECISION = 64` the governing product `(2^P + 1) * D = 2^126 + 2^62`
-/// stays below `2^128 - 1`. Exceeding `D` risks silent round-trip corruption,
-/// so every model constructor validates its denominator against this bound —
-/// though at `~2^62` (over four quintillion distinguishable values) the bound
-/// is unreachable for any practical model.
-pub const MAX_DENOMINATOR: u128 = 1 << (PRECISION - 2);
+/// (see `Encoder::with_precision` in `arithmetic-coding` 0.4 — a
+/// `debug_assert` there, which the `with_state` construction used by Minnow's
+/// visitors bypasses entirely, so Minnow must enforce it itself). At
+/// `PRECISION = 64` that admits `frequency_bits <= 62`, i.e.
+///
+/// ```text
+/// D = 2^(PRECISION - 2) - 1 = 2^62 - 1 = 4_611_686_018_427_387_903
+/// ```
+///
+/// Note the `- 1`: a denominator of *exactly* `2^62` has
+/// `frequency_bits = 63` and would need 65 bits of precision. Exceeding `D`
+/// risks silent round-trip corruption, so every model constructor validates
+/// its denominator against this bound — though at `~2^62` (over four
+/// quintillion distinguishable values) the bound is unreachable for any
+/// practical model.
+pub const MAX_DENOMINATOR: u128 = (1 << (PRECISION - 2)) - 1;
+
+#[cfg(test)]
+mod precision_tests {
+    use super::{MAX_DENOMINATOR, PRECISION};
+
+    /// `frequency_bits` exactly as `arithmetic-coding` 0.4 computes it.
+    fn frequency_bits(denominator: u128) -> u32 {
+        denominator.ilog2() + 1
+    }
+
+    /// [`MAX_DENOMINATOR`] is the *largest* denominator satisfying the
+    /// upstream coder invariant `PRECISION >= frequency_bits + 2` — the bound
+    /// is safe and tight.
+    #[test]
+    fn max_denominator_is_tight() {
+        assert!(PRECISION >= frequency_bits(MAX_DENOMINATOR) + 2);
+        assert!(PRECISION < frequency_bits(MAX_DENOMINATOR + 1) + 2);
+    }
+}

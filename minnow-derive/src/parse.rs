@@ -8,10 +8,12 @@ pub use parse_enum::Variant;
 pub use parse_struct::Field;
 
 /// The largest denominator the arithmetic coder can encode at the default
-/// precision. Mirrors `minnow::MAX_DENOMINATOR` (`2^(PRECISION - 2)` with
-/// `PRECISION = 64`); duplicated here because the derive macro cannot depend on
-/// the `minnow` crate at expansion time.
-const MAX_DENOMINATOR: u128 = 1 << (64 - 2);
+/// precision. Mirrors `minnow::MAX_DENOMINATOR` (`2^(PRECISION - 2) - 1` with
+/// `PRECISION = 64`; the `- 1` because a denominator of exactly `2^62` needs
+/// 65 bits of precision under the coder's `frequency_bits + 2` rule);
+/// duplicated here because the derive macro cannot depend on the `minnow`
+/// crate at expansion time.
+const MAX_DENOMINATOR: u128 = (1 << (64 - 2)) - 1;
 
 #[derive(FromDeriveInput)]
 pub struct Receiver {
