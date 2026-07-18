@@ -23,13 +23,14 @@ fn ui() {
 
     // The checked-in `.stderr` snapshots pin rustc's exact diagnostic
     // rendering (span underlines, box-drawing characters), generated on this
-    // workspace's stable-channel toolchain. This workspace's CI `test` job
-    // also runs the pinned MSRV toolchain, whose diagnostic formatting can
-    // differ — skip the stderr-sensitive checks there rather than fail for
-    // reasons unrelated to the macro's correctness. If `rustc --version`
-    // can't be determined, fail open and run the checks anyway (the
-    // behaviour every non-CI/local run gets).
-    if !is_msrv_toolchain() {
+    // workspace's current stable toolchain. CI also runs the pinned MSRV
+    // toolchain (`test (1.85)`) and a nightly (the coverage job), whose
+    // diagnostic wording differs — skip the stderr-sensitive checks on any
+    // non-current-stable toolchain rather than fail for reasons unrelated to
+    // the macro's correctness. If `rustc --version` can't be determined,
+    // fail open and run the checks anyway (the behaviour every non-CI/local
+    // run gets).
+    if is_snapshot_toolchain() {
         t.compile_fail("tests/ui/fail/*.rs");
     }
 
@@ -38,16 +39,19 @@ fn ui() {
     t.pass("tests/ui/pass/*.rs");
 }
 
-/// Best-effort detection of this workspace's pinned MSRV toolchain (see the
-/// `rust-version` key in `Cargo.toml`), so the stderr-snapshotted half of
-/// [`ui`] can be skipped there. Returns `false` (fail open) if the version
-/// can't be determined.
-fn is_msrv_toolchain() -> bool {
+/// Best-effort detection of a toolchain whose diagnostics match the
+/// checked-in `.stderr` snapshots: a *stable* rustc that is not this
+/// workspace's pinned MSRV (see the `rust-version` key in `Cargo.toml`).
+/// Nightly/beta compilers and the MSRV word their diagnostics differently.
+/// Returns `true` (fail open, run the checks) if the version can't be
+/// determined — the behaviour every local run gets.
+fn is_snapshot_toolchain() -> bool {
     const MSRV: &str = "1.85";
 
     let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     let Ok(output) = std::process::Command::new(rustc).arg("--version").output() else {
-        return false;
+        return true;
     };
-    String::from_utf8_lossy(&output.stdout).contains(MSRV)
+    let version = String::from_utf8_lossy(&output.stdout).into_owned();
+    !version.contains("nightly") && !version.contains("beta") && !version.contains(MSRV)
 }
