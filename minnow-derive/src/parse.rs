@@ -1,3 +1,14 @@
+//! Stage 1 of the derive pipeline (`parse` → `process` → `write`): turn the
+//! `syn::DeriveInput` for a `#[derive(Encodeable)]` struct or enum into a
+//! [`Receiver`] — a `syn`/`darling`-shaped view of the input with every
+//! `#[encode(...)]` attribute parsed into a [`Model`] (and, for enum
+//! variants, an optional manual `weight`) and validated against the coder's
+//! precision invariant.
+//!
+//! This stage owns attribute syntax and macro-expansion-time validation only;
+//! it does not decide *how* a field or variant gets encoded, which is
+//! [`crate::process`]'s job.
+
 use darling::{Error, FromDeriveInput, FromMeta, ast, export::syn};
 use syn::Attribute;
 

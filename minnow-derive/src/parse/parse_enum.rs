@@ -1,3 +1,7 @@
+//! Attribute parsing for an enum's variants: each variant's payload fields
+//! (parsed the same way as a struct's, via [`super::parse_struct`]) plus an
+//! optional manual `#[encode(weight = N)]` discriminant override.
+
 use darling::{FromVariant, ast, export::syn};
 
 use super::{Field, parse_variant_attributes};
