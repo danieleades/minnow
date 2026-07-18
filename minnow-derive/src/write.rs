@@ -11,6 +11,9 @@ pub fn write(receiver: Data) -> TokenStream {
     }
 }
 
+// The number of enum variants and their indices cannot realistically exceed
+// `u32::MAX`, so these `usize -> u32` casts cannot truncate in practice.
+#[allow(clippy::cast_possible_truncation)]
 fn write_enum(enum_data: EnumData) -> TokenStream {
     let len = enum_data.variants.len() as u32;
 
@@ -31,7 +34,7 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
                     quote_spanned! {ty_span=>
                         Self:: #ident (x) => {
                            visitor.encode_one(model, & #symbol)?;
-                           x.encode_with_config(visitor, #inner_model)
+                           minnow::EncodeableCustom::encode_with_config(x, visitor, #inner_model)
                         }
                     }
                 }
@@ -56,7 +59,7 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
                 let ty_span = inner_ty.span();
                 let inner_model = tuple.model();
                 quote_spanned! {ty_span=>
-                    #symbol => Ok(Self:: #ident (<#inner_ty> ::decode_with_config(visitor, #inner_model)?)),
+                    #symbol => Ok(Self:: #ident (<#inner_ty as minnow::EncodeableCustom> ::decode_with_config(visitor, #inner_model)?)),
                 }
             }
             // EnumStyle::Struct(_) => todo!(),
@@ -77,26 +80,27 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
             where
                 W: bitstream_io::BitWrite {
 
-                let model = minnow::OneShot::< #len >::default();
+                let model = minnow::OneShot::< #len >;
                 match self {
                     #encode_block
                 }
             }
 
-            fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, _config: ()) -> std::io::Result<Self>
+            fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, _config: ()) -> ::core::result::Result<Self, minnow::DecodeError>
             where
                 R: bitstream_io::BitRead,
                 Self: Sized {
-                    let model = minnow::OneShot::< #len >::default();
+                    let model = minnow::OneShot::< #len >;
                     match visitor.decode_one(model)? {
                         #decode_block
-                        _ => unreachable!(),
+                        other => ::core::result::Result::Err(minnow::DecodeError::InvalidSymbol { symbol: u128::from(other) }),
                     }
             }
         }
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn write_struct(struct_data: StructData) -> TokenStream {
     let encode_block: TokenStream = match &struct_data.fields {
         StructStyle::Tuple(fields) => {
@@ -107,7 +111,7 @@ fn write_struct(struct_data: StructData) -> TokenStream {
                     let model = field.model();
                     let i = syn::Index::from(i);
                     quote! {
-                        self. #i .encode_with_config(visitor, #model)?;
+                        minnow::EncodeableCustom::encode_with_config(& self. #i, visitor, #model)?;
                     }
                 })
                 .collect();
@@ -128,7 +132,7 @@ fn write_struct(struct_data: StructData) -> TokenStream {
                     let ident = field.ident.as_ref().unwrap();
                     let model = field.model();
                     quote! {
-                        self. #ident .encode_with_config(visitor, #model)?;
+                        minnow::EncodeableCustom::encode_with_config(& self. #ident, visitor, #model)?;
                     }
                 })
                 .collect();
@@ -153,13 +157,13 @@ fn write_struct(struct_data: StructData) -> TokenStream {
                     let model = field.model();
                     let ty = &field.ty;
                     quote! {
-                        <#ty>::decode_with_config(visitor, #model)?,
+                        <#ty as minnow::EncodeableCustom>::decode_with_config(visitor, #model)?,
                     }
                 })
                 .collect();
 
             quote! {
-                fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, config: ()) -> std::io::Result<Self>
+                fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, config: ()) -> ::core::result::Result<Self, minnow::DecodeError>
                 where
                     R: bitstream_io::BitRead,
                     Self: Sized,
@@ -178,13 +182,13 @@ fn write_struct(struct_data: StructData) -> TokenStream {
                     let ty = &field.ty;
                     let model = field.model();
                     quote! {
-                        #ident : <#ty>::decode_with_config(visitor, #model )?,
+                        #ident : <#ty as minnow::EncodeableCustom>::decode_with_config(visitor, #model )?,
                     }
                 })
                 .collect();
 
             quote! {
-                fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, config: ()) -> std::io::Result<Self>
+                fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, config: ()) -> ::core::result::Result<Self, minnow::DecodeError>
                 where
                     R: bitstream_io::BitRead,
                     Self: Sized,

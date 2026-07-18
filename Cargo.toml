@@ -7,16 +7,18 @@ license = "GPL-3.0"
 repository = "https://github.com/danieleades/minnow"
 keywords = ["compression", "encoding", "arithmetic-coding", "lossless"]
 categories = ["compression", "encoding", "parsing"]
+rust-version = "1.85"
 
 [workspace]
 members = [".", "minnow-derive"]
 
 [dependencies]
-arithmetic-coding = "0.3.1"
-bitstream-io = "1.2.0"
+arithmetic-coding = "0.4"
+bitstream-io = "2"
 minnow-derive = { version = "0.1.0", path = "minnow-derive" }
 num-traits = "0.2.14"
-thiserror = "1.0.30"
+thiserror = "2"
 
 [dev-dependencies]
+bitstream-io = "2"
 test-case = "3.0.0"

@@ -1,11 +1,11 @@
-use std::{io, mem::MaybeUninit};
+use std::io;
 
 use bitstream_io::{BitRead, BitWrite};
 
 use self::one_shot::OneShot;
 use crate::{
-    encodeable_custom::EncodeableCustom, float::FloatModel, DecodeVisitor, EncodeVisitor,
-    Encodeable,
+    encodeable_custom::EncodeableCustom, float::FloatModel, DecodeError, DecodeVisitor,
+    EncodeVisitor, Encodeable,
 };
 
 pub mod one_shot;
@@ -26,55 +26,66 @@ where
     {
         match self {
             Some(x) => {
-                Option__::Some.encode(visitor)?;
+                OptionDiscriminant::Some.encode(visitor)?;
                 x.encode_with_config(visitor, config)
             }
-            None => Option__::None.encode(visitor),
+            None => OptionDiscriminant::None.encode(visitor),
         }
     }
 
-    fn decode_with_config<R>(visitor: &mut DecodeVisitor<R>, config: T::Config) -> io::Result<Self>
+    fn decode_with_config<R>(
+        visitor: &mut DecodeVisitor<R>,
+        config: T::Config,
+    ) -> Result<Self, DecodeError>
     where
         R: BitRead,
     {
-        match Option__::decode(visitor)? {
-            Option__::Some => {
+        match OptionDiscriminant::decode(visitor)? {
+            OptionDiscriminant::Some => {
                 let x = T::decode_with_config(visitor, config)?;
                 Ok(Some(x))
             }
-            Option__::None => Ok(Option::None),
+            OptionDiscriminant::None => Ok(Option::None),
         }
     }
 }
 
-pub enum Option__ {
-    Some,
+/// The wire discriminant for [`Option`], encoded before any payload.
+///
+/// The wire order is `None = 0`, `Some = 1`.
+#[derive(Debug, Clone, Copy)]
+pub enum OptionDiscriminant {
+    /// Corresponds to [`Option::None`].
     None,
+    /// Corresponds to [`Option::Some`].
+    Some,
 }
 
-impl Encodeable for Option__ {
+impl Encodeable for OptionDiscriminant {
     fn encode<W>(&self, visitor: &mut EncodeVisitor<W>) -> io::Result<()>
     where
         W: BitWrite,
     {
         let value = match self {
-            Option__::Some => 0,
-            Option__::None => 1,
+            OptionDiscriminant::None => 0,
+            OptionDiscriminant::Some => 1,
         };
-        let model = OneShot::<2>::default();
+        let model = OneShot::<2>;
         visitor.encode_one(model, &value)
     }
 
-    fn decode<R>(visitor: &mut DecodeVisitor<R>) -> io::Result<Self>
+    fn decode<R>(visitor: &mut DecodeVisitor<R>) -> Result<Self, DecodeError>
     where
         R: BitRead,
         Self: Sized,
     {
-        let model = OneShot::<2>::default();
+        let model = OneShot::<2>;
         match visitor.decode_one(model)? {
-            0 => Ok(Option__::Some),
-            1 => Ok(Option__::None),
-            _ => unreachable!(),
+            0 => Ok(OptionDiscriminant::None),
+            1 => Ok(OptionDiscriminant::Some),
+            other => Err(DecodeError::InvalidSymbol {
+                symbol: u128::from(other),
+            }),
         }
     }
 }
@@ -96,7 +107,7 @@ impl EncodeableCustom for f64 {
     fn decode_with_config<R>(
         visitor: &mut DecodeVisitor<R>,
         config: Self::Config,
-    ) -> io::Result<Self>
+    ) -> Result<Self, DecodeError>
     where
         R: BitRead,
         Self: Sized,
@@ -112,21 +123,26 @@ impl EncodeableCustom for bool {
     where
         W: BitWrite,
     {
-        let model = OneShot::<2>::default();
+        let model = OneShot::<2>;
         let value = u32::from(*self);
         visitor.encode_one(model, &value)
     }
 
-    fn decode_with_config<R>(visitor: &mut DecodeVisitor<R>, _config: ()) -> io::Result<Self>
+    fn decode_with_config<R>(
+        visitor: &mut DecodeVisitor<R>,
+        _config: (),
+    ) -> Result<Self, DecodeError>
     where
         R: BitRead,
         Self: Sized,
     {
-        let model = OneShot::<2>::default();
+        let model = OneShot::<2>;
         match visitor.decode_one(model)? {
             0 => Ok(false),
             1 => Ok(true),
-            _ => unreachable!(),
+            other => Err(DecodeError::InvalidSymbol {
+                symbol: u128::from(other),
+            }),
         }
     }
 }
@@ -150,19 +166,38 @@ where
             .try_for_each(|x| x.encode_with_config(visitor, config.clone()))
     }
 
-    fn decode_with_config<R>(visitor: &mut DecodeVisitor<R>, config: T::Config) -> io::Result<Self>
+    fn decode_with_config<R>(
+        visitor: &mut DecodeVisitor<R>,
+        config: T::Config,
+    ) -> Result<Self, DecodeError>
     where
         R: BitRead,
         Self: Sized,
     {
-        #[allow(clippy::uninit_assumed_init)]
-        let mut array = unsafe { MaybeUninit::<[T; N]>::uninit().assume_init() };
+        // Decode into an array of `Option<T>` so that a decode failure part-way
+        // through does not require conjuring a `T` out of thin air (as the old
+        // `MaybeUninit::assume_init` did — instant undefined behaviour). Once
+        // every element has decoded successfully, unwrap them into `[T; N]`.
+        let mut error: Option<DecodeError> = None;
+        let decoded: [Option<T>; N] = std::array::from_fn(|_| {
+            if error.is_some() {
+                return None;
+            }
+            match T::decode_with_config(visitor, config.clone()) {
+                Ok(value) => Some(value),
+                Err(e) => {
+                    error = Some(e);
+                    None
+                }
+            }
+        });
 
-        for elem in &mut array[..] {
-            *elem = T::decode_with_config(visitor, config.clone())?;
+        if let Some(e) = error {
+            return Err(e);
         }
 
-        Ok(array)
+        // Every element decoded successfully, so all are `Some`.
+        Ok(decoded.map(|value| value.expect("all elements decoded successfully")))
     }
 }
 
@@ -173,7 +208,7 @@ mod tests {
 
     use crate::{
         encodeable_custom::EncodeableCustom, float::FloatModel, DecodeVisitor, EncodeVisitor,
-        Encodeable,
+        Encodeable, PRECISION,
     };
 
     #[test_case(&Option::Some(true))]
@@ -186,7 +221,7 @@ mod tests {
     {
         let mut bit_writer = BitWriter::endian(Vec::new(), BigEndian);
 
-        let mut encoder = EncodeVisitor::new(32, &mut bit_writer);
+        let mut encoder = EncodeVisitor::new(PRECISION, &mut bit_writer);
 
         input.encode(&mut encoder).unwrap();
         encoder.flush().unwrap();
@@ -197,7 +232,7 @@ mod tests {
 
         let bit_reader = BitReader::endian(compressed.as_slice(), BigEndian);
 
-        let mut decoder = DecodeVisitor::new(32, bit_reader);
+        let mut decoder = DecodeVisitor::new(PRECISION, bit_reader);
 
         let output = T::decode(&mut decoder).unwrap();
 
@@ -208,9 +243,9 @@ mod tests {
     #[test_case(&Option::Some(false), ())]
     #[test_case(&true, ())]
     #[test_case(&false, ())]
-    #[test_case(&450.0_f64, FloatModel::new(-10000.0..=10000.0, 1))]
-    #[test_case(&550.0_f64, FloatModel::new(-10000.0..=10000.0, 1))]
-    #[test_case(&-100.0_f64, FloatModel::new(-5000.0..=0.0, 0))]
+    #[test_case(&450.0_f64, FloatModel::new(-10000.0..=10000.0, 1).unwrap())]
+    #[test_case(&550.0_f64, FloatModel::new(-10000.0..=10000.0, 1).unwrap())]
+    #[test_case(&-100.0_f64, FloatModel::new(-5000.0..=0.0, 0).unwrap())]
     fn round_trip_with_config<T>(input: &T, config: T::Config)
     where
         T: EncodeableCustom + std::fmt::Debug + PartialEq,
@@ -218,7 +253,7 @@ mod tests {
     {
         let mut bit_writer = BitWriter::endian(Vec::new(), BigEndian);
 
-        let mut encoder = EncodeVisitor::new(32, &mut bit_writer);
+        let mut encoder = EncodeVisitor::new(PRECISION, &mut bit_writer);
 
         input
             .encode_with_config(&mut encoder, config.clone())
@@ -231,7 +266,7 @@ mod tests {
 
         let bit_reader = BitReader::endian(compressed.as_slice(), BigEndian);
 
-        let mut decoder = DecodeVisitor::new(32, bit_reader);
+        let mut decoder = DecodeVisitor::new(PRECISION, bit_reader);
 
         let output = T::decode_with_config(&mut decoder, config).unwrap();
 

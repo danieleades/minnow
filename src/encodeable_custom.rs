@@ -2,15 +2,18 @@ use std::io;
 
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 
-use crate::visitor::{DecodeVisitor, EncodeVisitor};
+use crate::{
+    visitor::{DecodeVisitor, EncodeVisitor},
+    DecodeError, PRECISION,
+};
 
 /// Structs that implement [`EncodeableCustom`] can be encoded and decoded using
 /// custom configuration.
 ///
-/// For structs that do not offer configurable encoding/decoding, [`Encodeable`]
-/// should be used instead. [`Encodeable`] is automatically derived for structs
-/// that implement [`EncodeableCustom`] where the config type implements
-/// [`Default`].
+/// For structs that do not offer configurable encoding/decoding,
+/// [`Encodeable`](crate::Encodeable) should be used instead.
+/// [`Encodeable`](crate::Encodeable) is automatically derived for structs that
+/// implement [`EncodeableCustom`] where the config type implements [`Default`].
 pub trait EncodeableCustom {
     /// The type of the configuration used to customise the encoding/decoding.
     type Config;
@@ -31,9 +34,15 @@ pub trait EncodeableCustom {
         W: BitWrite;
 
     /// Encode the struct into a [`Vec<u8>`] using the provided configuration.
+    ///
+    /// # Panics
+    ///
+    /// This method is infallible in practice: writing to a `Vec<u8>` cannot
+    /// produce an I/O error. It will only panic if that invariant is somehow
+    /// violated.
     fn encode_bytes_with_config(&self, config: Self::Config) -> Vec<u8> {
         let mut bit_writer = BitWriter::endian(Vec::new(), BigEndian);
-        let mut encoder = EncodeVisitor::new(32, &mut bit_writer);
+        let mut encoder = EncodeVisitor::new(PRECISION, &mut bit_writer);
 
         self.encode_with_config(&mut encoder, config)
             .expect("can't get io errors when writing to Vec<u8>");
@@ -55,23 +64,28 @@ pub trait EncodeableCustom {
     ///
     /// # Errors
     ///
-    /// This method can fail if the [`DecodeVisitor`]'s underlying reader cannot
-    /// be read from.
+    /// Returns a [`DecodeError`] if the underlying reader fails or the stream is
+    /// corrupt. Decoding untrusted bytes must never panic.
     fn decode_with_config<R>(
         visitor: &mut DecodeVisitor<R>,
         config: Self::Config,
-    ) -> io::Result<Self>
+    ) -> Result<Self, DecodeError>
     where
         R: BitRead,
         Self: Sized;
 
-    /// Decode the struct from a [`[u8]`] using the provided configuration.
-    fn decode_bytes_with_config(bytes: &[u8], config: Self::Config) -> io::Result<Self>
+    /// Decode the struct from a `[u8]` using the provided configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`DecodeError`] if the bytes are truncated or corrupt. This
+    /// method never panics, regardless of the input.
+    fn decode_bytes_with_config(bytes: &[u8], config: Self::Config) -> Result<Self, DecodeError>
     where
         Self: Sized,
     {
         let bit_reader = BitReader::endian(bytes, BigEndian);
-        let mut decoder = DecodeVisitor::new(32, bit_reader);
+        let mut decoder = DecodeVisitor::new(PRECISION, bit_reader);
 
         Self::decode_with_config(&mut decoder, config)
     }

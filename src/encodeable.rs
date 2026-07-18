@@ -5,6 +5,7 @@ use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 use crate::{
     encodeable_custom::EncodeableCustom,
     visitor::{DecodeVisitor, EncodeVisitor},
+    DecodeError, PRECISION,
 };
 
 /// Structs that implement [`EncodeableCustom`] can be encoded and decoded.
@@ -25,14 +26,28 @@ pub trait Encodeable {
         W: BitWrite;
 
     /// Encode the struct into a [`Vec<u8>`].
+    ///
+    /// # Panics
+    ///
+    /// This method is infallible in practice: writing to a `Vec<u8>` cannot
+    /// produce an I/O error. It will only panic if that invariant is somehow
+    /// violated.
     fn encode_bytes(&self) -> Vec<u8> {
         let mut bit_writer = BitWriter::endian(Vec::new(), BigEndian);
-        let mut encoder = EncodeVisitor::new(32, &mut bit_writer);
+        let mut encoder = EncodeVisitor::new(PRECISION, &mut bit_writer);
 
-        self.encode(&mut encoder).unwrap();
-        encoder.flush().unwrap();
-        bit_writer.byte_align().unwrap();
-        bit_writer.flush().unwrap();
+        // Writing to a `Vec<u8>` is infallible, so these operations cannot fail.
+        self.encode(&mut encoder)
+            .expect("writing to Vec<u8> is infallible");
+        encoder
+            .flush()
+            .expect("writing to Vec<u8> is infallible");
+        bit_writer
+            .byte_align()
+            .expect("writing to Vec<u8> is infallible");
+        bit_writer
+            .flush()
+            .expect("writing to Vec<u8> is infallible");
 
         bit_writer.into_writer()
     }
@@ -41,23 +56,27 @@ pub trait Encodeable {
     ///
     /// # Errors
     ///
-    /// This method can fail if the [`DecodeVisitor`]'s underlying reader cannot
-    /// be read from.
-    fn decode<R>(visitor: &mut DecodeVisitor<R>) -> io::Result<Self>
+    /// Returns a [`DecodeError`] if the underlying reader fails or the stream is
+    /// corrupt. Decoding untrusted bytes must never panic.
+    fn decode<R>(visitor: &mut DecodeVisitor<R>) -> Result<Self, DecodeError>
     where
         R: BitRead,
         Self: Sized;
 
-    /// Decode the struct from a [`[u8]`].
-    #[must_use]
-    fn decode_bytes(bytes: &[u8]) -> Self
+    /// Decode the struct from a `[u8]`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`DecodeError`] if the bytes are truncated or corrupt. This
+    /// method never panics, regardless of the input.
+    fn decode_bytes(bytes: &[u8]) -> Result<Self, DecodeError>
     where
         Self: Sized,
     {
         let bit_reader = BitReader::endian(bytes, BigEndian);
-        let mut decoder = DecodeVisitor::new(32, bit_reader);
+        let mut decoder = DecodeVisitor::new(PRECISION, bit_reader);
 
-        Self::decode(&mut decoder).unwrap()
+        Self::decode(&mut decoder)
     }
 }
 
@@ -74,7 +93,7 @@ where
         self.encode_with_config(visitor, config)
     }
 
-    fn decode<R>(visitor: &mut DecodeVisitor<R>) -> io::Result<Self>
+    fn decode<R>(visitor: &mut DecodeVisitor<R>) -> Result<Self, DecodeError>
     where
         R: BitRead,
         Self: Sized,

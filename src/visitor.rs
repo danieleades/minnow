@@ -1,9 +1,9 @@
 use std::io;
 
-use arithmetic_coding::{
-    decoder, encoder::State, fixed_length::Wrapper, one_shot, Decoder, Encoder,
-};
+use arithmetic_coding::{decoder, encoder::State, one_shot, Decoder, Encoder};
 use bitstream_io::{BitRead, BitWrite};
+
+use crate::DecodeError;
 
 /// A visitor that encodes the fields of a struct into a writer
 #[derive(Debug)]
@@ -31,18 +31,34 @@ where
     /// # Errors
     ///
     /// This method can fail if the underlying writer cannot be written to.
-    /// This will generally by infallible, as in normal use the writer is a
+    /// This will generally be infallible, as in normal use the writer is a
     /// `Vec<u8>`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called after the internal state has been consumed, which
+    /// cannot happen through the public API.
     pub fn encode_one<M>(&mut self, model: M, value: &M::Symbol) -> io::Result<()>
     where
-        M: one_shot::Model<B = u128, ValueError = !>,
+        M: one_shot::Model<B = u128>,
     {
-        #![allow(clippy::missing_panics_doc)]
-        let mut encoder = Encoder::with_state(self.state.take().unwrap(), Wrapper::new(model));
-        encoder.encode(Some(value)).unwrap();
+        let state = self.state.take().expect("encoder state is always present");
+        let mut encoder = Encoder::with_state(state, one_shot::Wrapper::new(model));
+        let result = encoder.encode(Some(value));
         let (_model, state) = encoder.into_inner();
         self.state = Some(state);
-        Ok(())
+
+        match result {
+            Ok(()) => Ok(()),
+            Err(arithmetic_coding::Error::Io(e)) => Err(e),
+            // A `ValueError` here would mean the caller asked to encode a symbol
+            // the model rejects, which is a programming error rather than an I/O
+            // failure. Surface it as invalid data rather than panicking.
+            Err(arithmetic_coding::Error::ValueError(_)) => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "attempted to encode a symbol that is invalid for its model",
+            )),
+        }
     }
 
     /// Flush the internal buffer of the [`EncodeVisitor`].
@@ -53,9 +69,16 @@ where
     /// # Errors
     ///
     /// This method can fail if the underlying writer cannot be written to.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called after the internal state has been consumed, which
+    /// cannot happen through the public API.
     pub fn flush(&mut self) -> io::Result<()> {
-        #![allow(clippy::missing_panics_doc)]
-        self.state.as_mut().unwrap().flush()
+        self.state
+            .as_mut()
+            .expect("encoder state is always present")
+            .flush()
     }
 }
 
@@ -84,15 +107,26 @@ where
     ///
     /// # Errors
     ///
-    /// This method can fail if the underlying reader cannot be read from.
-    pub fn decode_one<M>(&mut self, model: M) -> io::Result<M::Symbol>
+    /// Returns [`DecodeError::Io`] if the underlying reader fails, or
+    /// [`DecodeError::InvalidSymbol`] if the stream is exhausted where a symbol
+    /// was expected (a corrupt or truncated stream).
+    ///
+    /// # Panics
+    ///
+    /// Panics if called after the internal state has been consumed, which
+    /// cannot happen through the public API.
+    pub fn decode_one<M>(&mut self, model: M) -> Result<M::Symbol, DecodeError>
     where
         M: one_shot::Model<B = u128>,
     {
-        let mut decoder = Decoder::with_state(self.state.take().unwrap(), Wrapper::new(model));
-        let symbol = decoder.decode().unwrap().unwrap();
+        let state = self.state.take().expect("decoder state is always present");
+        let mut decoder = Decoder::with_state(state, one_shot::Wrapper::new(model));
+        let result = decoder.decode();
         let (_model, state) = decoder.into_inner();
         self.state = Some(state);
-        Ok(symbol)
+
+        // A one-shot wrapper always yields exactly one symbol; `None` here means
+        // the stream was exhausted before that symbol could be produced.
+        result?.ok_or(DecodeError::InvalidSymbol { symbol: 0 })
     }
 }

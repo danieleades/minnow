@@ -75,6 +75,7 @@ mod tests {
         }
         ; "tuple enum w model"
     )]
+    #[allow(clippy::needless_pass_by_value)]
     fn parse(tokens: TokenStream) {
         let parsed = syn::parse_str(&tokens.to_string()).unwrap();
         let _receiver = Receiver::from_derive_input(&parsed).unwrap();

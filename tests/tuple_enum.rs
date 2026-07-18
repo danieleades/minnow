@@ -20,7 +20,7 @@ fn round_trip() {
 
     let compressed = input.encode_bytes();
 
-    let output = MyNestedEnum::decode_bytes(&compressed);
+    let output = MyNestedEnum::decode_bytes(&compressed).unwrap();
 
     assert_eq!(input, output);
 }

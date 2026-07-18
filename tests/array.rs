@@ -14,7 +14,7 @@ fn round_trip() {
 
     let compressed = input.encode_bytes();
 
-    let output = MyStruct::decode_bytes(&compressed);
+    let output = MyStruct::decode_bytes(&compressed).unwrap();
 
     assert_eq!(input, output);
 }
