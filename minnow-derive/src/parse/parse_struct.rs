@@ -2,7 +2,7 @@ use darling::FromField;
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use super::{parse_attributes, Model};
+use super::{Model, parse_attributes};
 
 pub struct Field {
     pub ident: Option<syn::Ident>,

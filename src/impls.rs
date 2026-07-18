@@ -4,8 +4,8 @@ use bitstream_io::{BitRead, BitWrite};
 
 use self::one_shot::OneShot;
 use crate::{
-    encodeable_custom::EncodeableCustom, float::FloatModel, DecodeError, DecodeVisitor,
-    EncodeVisitor, Encodeable,
+    DecodeError, DecodeVisitor, EncodeVisitor, Encodeable, encodeable_custom::EncodeableCustom,
+    float::FloatModel,
 };
 
 pub mod one_shot;
@@ -207,8 +207,8 @@ mod tests {
     use test_case::test_case;
 
     use crate::{
-        encodeable_custom::EncodeableCustom, float::FloatModel, DecodeVisitor, EncodeVisitor,
-        Encodeable, PRECISION,
+        DecodeVisitor, EncodeVisitor, Encodeable, PRECISION, encodeable_custom::EncodeableCustom,
+        float::FloatModel,
     };
 
     #[test_case(&Option::Some(true))]

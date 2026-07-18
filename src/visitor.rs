@@ -1,6 +1,6 @@
 use std::io;
 
-use arithmetic_coding::{decoder, encoder::State, one_shot, Decoder, Encoder};
+use arithmetic_coding::{Decoder, Encoder, decoder, encoder::State, one_shot};
 use bitstream_io::{BitRead, BitWrite};
 
 use crate::DecodeError;

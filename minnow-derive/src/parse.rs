@@ -1,4 +1,4 @@
-use darling::{ast, Error, FromDeriveInput, FromMeta};
+use darling::{Error, FromDeriveInput, FromMeta, ast};
 use syn::Attribute;
 
 pub mod parse_enum;

@@ -3,9 +3,9 @@ use std::io;
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 
 use crate::{
+    DecodeError, PRECISION,
     encodeable_custom::EncodeableCustom,
     visitor::{DecodeVisitor, EncodeVisitor},
-    DecodeError, PRECISION,
 };
 
 /// Structs that implement [`EncodeableCustom`] can be encoded and decoded.
@@ -39,9 +39,7 @@ pub trait Encodeable {
         // Writing to a `Vec<u8>` is infallible, so these operations cannot fail.
         self.encode(&mut encoder)
             .expect("writing to Vec<u8> is infallible");
-        encoder
-            .flush()
-            .expect("writing to Vec<u8> is infallible");
+        encoder.flush().expect("writing to Vec<u8> is infallible");
         bit_writer
             .byte_align()
             .expect("writing to Vec<u8> is infallible");
@@ -56,8 +54,8 @@ pub trait Encodeable {
     ///
     /// # Errors
     ///
-    /// Returns a [`DecodeError`] if the underlying reader fails or the stream is
-    /// corrupt. Decoding untrusted bytes must never panic.
+    /// Returns a [`DecodeError`] if the underlying reader fails or the stream
+    /// is corrupt. Decoding untrusted bytes must never panic.
     fn decode<R>(visitor: &mut DecodeVisitor<R>) -> Result<Self, DecodeError>
     where
         R: BitRead,

@@ -22,7 +22,8 @@ pub enum ModelError {
     #[error("model lower bound must not exceed the upper bound")]
     InvertedBounds,
 
-    /// The resulting denominator exceeds [`MAX_DENOMINATOR`](crate::MAX_DENOMINATOR).
+    /// The resulting denominator exceeds
+    /// [`MAX_DENOMINATOR`](crate::MAX_DENOMINATOR).
     #[error(
         "model denominator ({denominator}) exceeds the maximum ({max}) permitted at precision \
          {precision}; narrow the range or reduce the precision"
@@ -73,9 +74,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`ModelError`] if either bound is `NaN`/infinite, if `min > max`,
-    /// or if the number of distinguishable values in the range would exceed
-    /// [`MAX_DENOMINATOR`](crate::MAX_DENOMINATOR).
+    /// Returns [`ModelError`] if either bound is `NaN`/infinite, if `min >
+    /// max`, or if the number of distinguishable values in the range would
+    /// exceed [`MAX_DENOMINATOR`](crate::MAX_DENOMINATOR).
     pub fn new(range: RangeInclusive<F>, precision: i8) -> Result<Self, ModelError> {
         let min = *range.start();
         let max = *range.end();
@@ -87,17 +88,19 @@ where
             return Err(ModelError::InvertedBounds);
         }
 
-        let model = Self { min, max, precision };
+        let model = Self {
+            min,
+            max,
+            precision,
+        };
 
         // The denominator is the number of distinguishable values in the range.
         let steps = ((max - min) * model.multiplier()).round();
-        let steps = steps
-            .to_u128()
-            .ok_or(ModelError::DenominatorTooLarge {
-                denominator: u128::MAX,
-                max: MAX_DENOMINATOR,
-                precision: crate::PRECISION,
-            })?;
+        let steps = steps.to_u128().ok_or(ModelError::DenominatorTooLarge {
+            denominator: u128::MAX,
+            max: MAX_DENOMINATOR,
+            precision: crate::PRECISION,
+        })?;
         // `denominator = steps + 1`; reject before the `+ 1` can overflow or
         // exceed the bound.
         if steps >= MAX_DENOMINATOR {

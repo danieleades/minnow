@@ -3,8 +3,8 @@ use std::io;
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 
 use crate::{
-    visitor::{DecodeVisitor, EncodeVisitor},
     DecodeError, PRECISION,
+    visitor::{DecodeVisitor, EncodeVisitor},
 };
 
 /// Structs that implement [`EncodeableCustom`] can be encoded and decoded using
@@ -64,8 +64,8 @@ pub trait EncodeableCustom {
     ///
     /// # Errors
     ///
-    /// Returns a [`DecodeError`] if the underlying reader fails or the stream is
-    /// corrupt. Decoding untrusted bytes must never panic.
+    /// Returns a [`DecodeError`] if the underlying reader fails or the stream
+    /// is corrupt. Decoding untrusted bytes must never panic.
     fn decode_with_config<R>(
         visitor: &mut DecodeVisitor<R>,
         config: Self::Config,

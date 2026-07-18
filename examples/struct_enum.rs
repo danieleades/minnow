@@ -37,8 +37,8 @@ impl Encodeable for MyEnum {
         let model = minnow::OneShot::<2>;
         match visitor.decode_one(model)? {
             0 => {
-                let x =
-                    visitor.decode_one(minnow::FloatModel::new(-10_000.0..=10_000.0, 1).unwrap())?;
+                let x = visitor
+                    .decode_one(minnow::FloatModel::new(-10_000.0..=10_000.0, 1).unwrap())?;
                 let y = visitor.decode_one(minnow::FloatModel::new(0.0..=5_000.0, 0).unwrap())?;
                 Ok(MyEnum::A { x, y })
             }

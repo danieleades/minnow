@@ -1,6 +1,6 @@
 use darling::{FromField, FromVariant};
 
-use super::{parse_attributes, Model};
+use super::{Model, parse_attributes};
 
 #[derive(FromField)]
 pub struct Field {

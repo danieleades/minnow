@@ -13,9 +13,13 @@ jobs:
       - name: checkout source
         uses: actions/checkout@v4
 
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # Doctest coverage (--doctests) needs -Z unstable-options, so this job
+      # runs on a pinned nightly. Bump the pin as needed; correctness is still
+      # guarded by the stable/MSRV test jobs in CI.yml.
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: nightly-2026-07-17
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
