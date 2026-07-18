@@ -1,0 +1,5 @@
+error: float model denominator (9223372036854775809) exceeds the maximum (4611686018427387903) permitted at precision 64; narrow the range or reduce the precision
+ --> tests/ui/fail/oversized_float_denominator.rs:8:5
+  |
+8 |     #[encode(float(min = 0.0, max = 9223372036854775808.0, precision = 0))]
+  |     ^

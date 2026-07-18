@@ -1,0 +1,5 @@
+error: `weight` must be at least 1
+ --> tests/ui/fail/zero_weight.rs:7:5
+  |
+7 |     #[encode(weight = 0)]
+  |     ^

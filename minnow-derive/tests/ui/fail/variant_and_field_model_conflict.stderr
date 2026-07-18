@@ -1,0 +1,5 @@
+error: cannot combine a payload model attribute on the variant with an `#[encode]` attribute on its field; put the attribute on the field alone
+ --> tests/ui/fail/variant_and_field_model_conflict.rs:9:5
+  |
+9 |     A(#[encode(float(min = 0.0, max = 2.0, precision = 0))] f64),
+  |     ^

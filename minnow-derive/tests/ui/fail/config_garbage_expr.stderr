@@ -1,0 +1,5 @@
+error: expected an expression
+ --> tests/ui/fail/config_garbage_expr.rs:9:23
+  |
+9 |     #[encode(config = +++)]
+  |                       ^
