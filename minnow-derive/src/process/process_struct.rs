@@ -1,3 +1,8 @@
+//! Lowers a parsed struct's fields into the shape [`crate::write`] codegens
+//! from: [`Style`] classifies it as unit / tuple / struct, matching the same
+//! classification used for an enum variant's payload (see
+//! `crate::process::process_enum`), so the two share one codegen path.
+
 use darling::ast;
 
 use crate::parse;

@@ -1,3 +1,5 @@
+//! Attribute parsing for a struct's (or enum variant's) individual fields.
+
 use darling::FromField;
 use proc_macro2::TokenStream;
 

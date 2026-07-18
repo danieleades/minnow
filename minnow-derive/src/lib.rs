@@ -29,7 +29,41 @@ mod write;
 ///   `min`/`max`/`precision` are validated at macro-expansion time (mirroring
 ///   `FloatModel::new`), so an out-of-range or inverted bound is a compile
 ///   error, not a runtime panic.
-/// * `#[encode(string(max_length = ...))]` — sugar for a `StringModel`.
+///
+///   ```rust,ignore
+///   #[encode(float(min = -10_000.0, max = 10_000.0, precision = 1))]
+///   pub x: f64,
+///   ```
+///
+/// * `#[encode(int(min = ..., max = ...))]` — sugar for an [`IntModel`](https://docs.rs/minnow/latest/minnow/struct.IntModel.html);
+///   the target integer type is inferred from the field, and bounds are
+///   validated at macro-expansion time exactly like `float`.
+///
+///   ```rust,ignore
+///   #[encode(int(min = 0, max = 200))]
+///   pub age: u8,
+///   ```
+///
+/// * `#[encode(string(max_length = ...))]` — sugar for a [`StringModel`](https://docs.rs/minnow/latest/minnow/struct.StringModel.html)
+///   (`max_length` in bytes).
+///
+///   ```rust,ignore
+///   #[encode(string(max_length = 64))]
+///   pub name: String,
+///   ```
+///
+/// * `#[encode(seq(max_len = ..., elem = <expr>))]` — sugar for a [`SeqModel`](https://docs.rs/minnow/latest/minnow/struct.SeqModel.html)
+///   wrapping a bounded `Vec<T>`. `elem` is the per-element config expression
+///   and may be omitted when `T::Config: Default`.
+///
+///   ```rust,ignore
+///   #[encode(seq(max_len = 16))]
+///   pub flags: Vec<bool>,
+///
+///   #[encode(seq(max_len = 8, elem = float_model()))]
+///   pub samples: Vec<f64>,
+///   ```
+///
 /// * `#[encode(config = <expr>)]` — the general escape hatch every other form
 ///   is sugar for: an arbitrary Rust expression, evaluated at runtime and
 ///   passed as the field's config. Because the expression is arbitrary, it
@@ -37,6 +71,12 @@ mod write;
 ///   syntax, or a value of the wrong `Config` type) surfaces as an ordinary
 ///   compile error at its interpolation site inside the generated impl, rather
 ///   than a clean macro diagnostic pointing at the attribute.
+///
+///   ```rust,ignore
+///   #[encode(config = my_crate::custom_model())]
+///   pub reading: MyType,
+///   ```
+///
 /// * No attribute — the field's config is `Default::default()` (works for any
 ///   `Config: Default`, most commonly `Config = ()`).
 ///
@@ -48,8 +88,21 @@ mod write;
 /// # Enum discriminant weighting
 ///
 /// An enum variant may also carry `#[encode(weight = N)]`, overriding its
-/// automatic (payload-cardinality) discriminant weight — see the `minnow`
-/// crate documentation for the weighted-enum theory.
+/// automatic (payload-cardinality) discriminant weight:
+///
+/// ```rust,ignore
+/// #[derive(Encodeable)]
+/// enum Reading {
+///     #[encode(weight = 1000)]
+///     Common,
+///     Rare,
+/// }
+/// ```
+///
+/// See the `minnow` crate documentation ("How Minnow compresses" in the
+/// README) for the weighted-enum theory: this is the same mechanism behind
+/// automatic weighting, so it composes with both the worst-case-optimal
+/// default and a manually-supplied prior.
 ///
 /// # Generics
 ///

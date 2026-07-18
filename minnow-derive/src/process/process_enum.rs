@@ -1,3 +1,8 @@
+//! Lowers a parsed enum's variants: each variant's payload is reduced to a
+//! [`StructStyle`], exactly like a struct's fields (see
+//! `crate::process::process_struct`), so a struct-style or multi-field tuple
+//! variant is just an anonymous struct to [`crate::write`].
+
 use crate::{parse, process::StructStyle};
 
 pub struct Variant {
