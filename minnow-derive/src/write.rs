@@ -125,12 +125,15 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
 
     let encode_arms = parts.iter().map(|p| &p.encode_arm);
     let decode_arms = parts.iter().map(|p| &p.decode_arm);
-    let discriminant_weights = parts.iter().map(|p| &p.discriminant_weight);
-    let discriminant_weights_2 = parts.iter().map(|p| &p.discriminant_weight);
-    let discriminant_weights_3 = parts.iter().map(|p| &p.discriminant_weight);
-    let discriminant_weights_4 = parts.iter().map(|p| &p.discriminant_weight);
-    let discriminant_weights_5 = parts.iter().map(|p| &p.discriminant_weight);
     let cardinalities = parts.iter().map(|p| &p.cardinality);
+
+    // The discriminant-model constructor is built once and interpolated into
+    // every generated method body, so encode, decode, and the bit-accounting
+    // methods cannot drift apart in how they weight the discriminant.
+    let discriminant_weights = parts.iter().map(|p| &p.discriminant_weight);
+    let model_ctor = quote! {
+        minnow::WeightedModel::new([ #( #discriminant_weights ),* ])
+    };
 
     // `worst_case_bits`: max over variants of (discriminant bits + payload bits).
     let worst_case_terms = parts.iter().enumerate().map(|(i, p)| {
@@ -162,28 +165,28 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
             }
 
             fn worst_case_bits(_config: &Self::Config) -> f64 {
-                let model = minnow::WeightedModel::new([ #( #discriminant_weights ),* ]);
+                let model = #model_ctor;
                 let mut worst = f64::NEG_INFINITY;
                 #( #worst_case_terms )*
                 worst
             }
 
             fn best_case_bits(_config: &Self::Config) -> f64 {
-                let model = minnow::WeightedModel::new([ #( #discriminant_weights_5 ),* ]);
+                let model = #model_ctor;
                 let mut best = f64::INFINITY;
                 #( #best_case_terms )*
                 best
             }
 
             fn report(_config: &Self::Config) -> minnow::SizeReport {
-                let model = minnow::WeightedModel::new([ #( #discriminant_weights_2 ),* ]);
+                let model = #model_ctor;
                 minnow::SizeReport::sum(::std::vec![ #( #report_children ),* ])
             }
 
             fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> std::io::Result<()>
             where
                 W: bitstream_io::BitWrite {
-                let model = minnow::WeightedModel::new([ #( #discriminant_weights_3 ),* ]);
+                let model = #model_ctor;
                 match self {
                     #( #encode_arms )*
                 }
@@ -193,7 +196,7 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
             where
                 R: bitstream_io::BitRead,
                 Self: Sized {
-                let model = minnow::WeightedModel::new([ #( #discriminant_weights_4 ),* ]);
+                let model = #model_ctor;
                 match visitor.decode_one(model)? {
                     #( #decode_arms )*
                     other => ::core::result::Result::Err(minnow::DecodeError::InvalidSymbol { symbol: u128::from(other) }),

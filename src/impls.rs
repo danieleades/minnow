@@ -11,6 +11,19 @@ use crate::{
 pub mod one_shot;
 pub mod weighted;
 
+/// The weighted discriminant model shared by *every* `Option<T>` code path.
+///
+/// Wire order `None = 0`, `Some = 1`, with interval widths `{None: 1, Some:
+/// W(T)}`. Encode, decode, and the bit-accounting methods must all use this one
+/// constructor: if they built their models independently they could drift
+/// apart, corrupting either the wire format or the pre-decode length window.
+fn option_discriminant<T>(config: &T::Config) -> WeightedModel
+where
+    T: EncodeableCustom,
+{
+    WeightedModel::new([1, T::weight(config).get()])
+}
+
 impl<T> EncodeableCustom for Option<T>
 where
     T: EncodeableCustom,
@@ -23,17 +36,16 @@ where
     }
 
     fn worst_case_bits(config: &Self::Config) -> f64 {
-        // Discriminant widths `{None: 1, Some: W(T)}`. Under exact weighting
-        // both variants cost `log₂(1 + W(T))`; the max also stays correct if
-        // the discriminant is rescaled.
-        let model = WeightedModel::new([1, T::weight(config).get()]);
+        // Under exact weighting both variants cost `log₂(1 + W(T))`; the max
+        // also stays correct if the discriminant is rescaled.
+        let model = option_discriminant::<T>(config);
         let none_bits = model.discriminant_bits(0);
         let some_bits = model.discriminant_bits(1) + T::worst_case_bits(config);
         none_bits.max(some_bits)
     }
 
     fn best_case_bits(config: &Self::Config) -> f64 {
-        let model = WeightedModel::new([1, T::weight(config).get()]);
+        let model = option_discriminant::<T>(config);
         let none_bits = model.discriminant_bits(0);
         let some_bits = model.discriminant_bits(1) + T::best_case_bits(config);
         none_bits.min(some_bits)
@@ -47,10 +59,9 @@ where
     where
         W: BitWrite,
     {
-        // Wire order: `None = 0`, `Some = 1`. Interval widths are proportional
-        // to each variant's payload weight, so every value of `Option<T>` costs
-        // exactly `log₂(1 + W(T))` bits.
-        let model = WeightedModel::new([1, T::weight(&config).get()]);
+        // Every value of `Option<T>` costs exactly `log₂(1 + W(T))` bits under
+        // the shared weighted discriminant.
+        let model = option_discriminant::<T>(&config);
         match self {
             Some(x) => {
                 visitor.encode_one(model, &1_u32)?;
@@ -67,7 +78,7 @@ where
     where
         R: BitRead,
     {
-        let model = WeightedModel::new([1, T::weight(&config).get()]);
+        let model = option_discriminant::<T>(&config);
         match visitor.decode_one(model)? {
             0 => Ok(Option::None),
             1 => {
@@ -175,8 +186,11 @@ where
     }
 
     fn report(config: &Self::Config) -> SizeReport {
+        // Every element has the same config, so compute the (possibly deep)
+        // element report once and clone it per index.
+        let element = T::report(config);
         let children = (0..N)
-            .map(|i| T::report(config).with_name(i.to_string()))
+            .map(|i| element.clone().with_name(i.to_string()))
             .collect();
         SizeReport::product(children)
     }

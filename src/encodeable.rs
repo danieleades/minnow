@@ -45,17 +45,16 @@ pub trait Encodeable {
     /// A [`SizeReport`] describing the worst-case encoded size of this type,
     /// using its [`Default`] configuration.
     ///
-    /// The default implementation returns an empty leaf; the blanket
-    /// implementation over [`EncodeableCustom`] overrides it with the real
-    /// per-field breakdown. (Hand-written [`Encodeable`] impls that want an
-    /// accurate report should override this.)
+    /// This method is deliberately *required*: a default (such as an empty
+    /// report) would silently claim "zero bits" for any hand-written impl that
+    /// forgot to override it, poisoning capacity planning. The blanket
+    /// implementation over [`EncodeableCustom`] provides the real per-field
+    /// breakdown for derived types; hand-written impls must state their own
+    /// (see `examples/struct_enum.rs`).
     #[must_use]
     fn size_report() -> SizeReport
     where
-        Self: Sized,
-    {
-        SizeReport::leaf(0.0)
-    }
+        Self: Sized;
 
     /// Encode the struct into a [`Vec<u8>`].
     ///

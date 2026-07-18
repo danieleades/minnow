@@ -150,9 +150,24 @@ fn rescale(weights: &[u128], target: u128) -> Vec<u128> {
         used += floor_u;
     }
 
+    // `f64` rounding error could in principle push the sum of floors past the
+    // integer budget; the arithmetic must not depend on that never happening.
+    // Trim any excess from the largest width (which dwarfs the at-most-`k`-unit
+    // excess), keeping every width `>= 0` here (`>= 1` after the reserved unit
+    // is added back below).
+    let excess = used.saturating_sub(budget);
+    if excess > 0 {
+        let largest = (0..k)
+            .max_by_key(|&i| floors[i])
+            .expect("weights are non-empty");
+        let trim = excess.min(floors[largest]);
+        floors[largest] -= trim;
+        used -= trim;
+    }
+
     // Distribute the rounding leftover (strictly fewer than `k` units) to the
     // symbols with the largest fractional remainders.
-    let mut leftover = budget - used;
+    let mut leftover = budget.saturating_sub(used);
     let mut order: Vec<usize> = (0..k).collect();
     order.sort_by(|&a, &b| {
         remainders[b]

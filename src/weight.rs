@@ -53,7 +53,7 @@ use std::ops::{Add, Mul};
 /// The sentinel value [`u128::MAX`] denotes a *saturated* weight — a
 /// cardinality at least that large, whose exact value was lost to overflow.
 /// Construct weights with [`Weight::new`], combine them with `+`/`*` (or the
-/// explicit `saturating_*`/`checked_*` methods), and read the bit cost with
+/// explicit `saturating_*` methods), and read the bit cost with
 /// [`Weight::log2`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Weight(u128);
@@ -116,51 +116,14 @@ impl Weight {
         Self(self.0.saturating_mul(rhs.0))
     }
 
-    /// Checked addition: `None` on overflow or if either operand is already
-    /// saturated.
-    #[must_use]
-    pub const fn checked_add(self, rhs: Self) -> Option<Self> {
-        if self.is_saturated() || rhs.is_saturated() {
-            return None;
-        }
-        match self.0.checked_add(rhs.0) {
-            Some(sum) => Some(Self(sum)),
-            None => None,
-        }
-    }
-
-    /// Checked multiplication: `None` on overflow or if either operand is
-    /// already saturated.
-    #[must_use]
-    pub const fn checked_mul(self, rhs: Self) -> Option<Self> {
-        if self.is_saturated() || rhs.is_saturated() {
-            return None;
-        }
-        match self.0.checked_mul(rhs.0) {
-            Some(product) => Some(Self(product)),
-            None => None,
-        }
-    }
-
     /// Saturating exponentiation (the weight of `[T; exp]` is
     /// `W(T).pow(exp)`).
     ///
-    /// Saturation is sticky, exactly as for [`Weight::saturating_mul`].
+    /// Saturation is sticky, exactly as for [`Weight::saturating_mul`]
+    /// (`SATURATED.pow(0)` is still `ONE`, matching `x⁰ = 1`).
     #[must_use]
-    pub fn pow(self, exp: u32) -> Self {
-        let mut result = Self::ONE;
-        let mut base = self;
-        let mut remaining = exp;
-        while remaining > 0 {
-            if remaining & 1 == 1 {
-                result = result.saturating_mul(base);
-            }
-            remaining >>= 1;
-            if remaining > 0 {
-                base = base.saturating_mul(base);
-            }
-        }
-        result
+    pub const fn pow(self, exp: u32) -> Self {
+        Self(self.0.saturating_pow(exp))
     }
 
     /// The number of bits needed to distinguish this many values: `log₂(w)`.
@@ -230,20 +193,11 @@ mod tests {
     }
 
     #[test]
-    fn checked_reports_overflow() {
-        let big = Weight::new(u128::MAX);
-        assert_eq!(
-            Weight::new(2).checked_mul(Weight::new(3)),
-            Some(Weight::new(6))
-        );
-        assert_eq!(big.checked_add(Weight::ONE), None);
-        assert_eq!(Weight::SATURATED.checked_mul(Weight::new(2)), None);
-    }
-
-    #[test]
     fn pow_saturates() {
         assert_eq!(Weight::new(2).pow(10), Weight::new(1024));
         assert_eq!(Weight::new(3).pow(0), Weight::ONE);
+        assert_eq!(Weight::SATURATED.pow(0), Weight::ONE);
+        assert!(Weight::SATURATED.pow(1).is_saturated());
         assert!(Weight::new(1 << 40).pow(10).is_saturated());
     }
 

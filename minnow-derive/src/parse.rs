@@ -66,6 +66,30 @@ impl Model {
         Self::from_meta(&attr.meta)
     }
 
+    /// Lower an optional parsed model to the config expression the generated
+    /// code passes to `encode_with_config`/`decode_with_config`.
+    ///
+    /// This is the single source of truth for that lowering — struct fields and
+    /// enum-variant payloads must generate identical config expressions, or the
+    /// two paths drift.
+    pub fn config_tokens(model: Option<&Self>) -> proc_macro2::TokenStream {
+        use quote::quote;
+        match model {
+            Some(Self::Float {
+                min: Number(min),
+                max: Number(max),
+                precision: Number(precision),
+            }) => quote! {
+                minnow::FloatModel::new( #min ..= #max, #precision )
+                    .expect("model bounds validated at compile time")
+            },
+            Some(Self::String { max_length }) => {
+                quote! { minnow::StringModel::new( #max_length ) }
+            }
+            None => quote! {()},
+        }
+    }
+
     /// Validate a model's parameters at macro-expansion time so that invalid
     /// bounds become a clean compile error rather than a runtime panic.
     fn validate(&self) -> Result<(), String> {
