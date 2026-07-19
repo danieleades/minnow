@@ -148,7 +148,10 @@ pub trait EncodeableCustom {
         // weighting the two ends coincide, pinning the length exactly and
         // catching truncation; manual `#[encode(weight)]` overrides widen the
         // window but it still never rejects a genuinely valid encoding.
-        let expected = Self::report(&config).total_bytes();
+        // Computed from the scalar bit bounds directly — building the full
+        // `SizeReport` tree here would be wasted work on every decode.
+        let expected =
+            crate::report::bytes_for(Self::worst_case_bits(&config) + crate::TERMINATION_BITS);
         let lower = crate::report::bytes_for(Self::best_case_bits(&config));
         let actual = bytes.len();
         if actual < lower || actual > expected {

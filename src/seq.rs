@@ -150,17 +150,19 @@ where
     }
 
     fn report(config: &Self::Config) -> SizeReport {
-        // Materialises one child node per possible element slot (`max_len` of
-        // them), matching `[T; N]`'s array report. This is `O(max_len)` in
-        // both time and memory, so it is only practical for reasonably small
-        // bounds — a `max_len` in the billions would exhaust memory here even
-        // though `weight`/`worst_case_bits` stay cheap.
+        // A compact tree — a `length` leaf plus one element *template* —
+        // rather than one node per slot: `max_len` may be in the billions,
+        // and this report is built on every `decode_bytes` call. The node's
+        // bit total is computed arithmetically instead of summed from
+        // children, so it stays exact.
         let length_leaf = SizeReport::leaf(length_bits(config.max_len)).with_name("length");
-        let element = T::report(&config.elem);
-        let mut children = Vec::with_capacity(config.max_len as usize + 1);
-        children.push(length_leaf);
-        children.extend((0..config.max_len).map(|i| element.clone().with_name(i.to_string())));
-        SizeReport::product(children)
+        let element =
+            T::report(&config.elem).with_name(format!("element (worst case × {})", config.max_len));
+        SizeReport {
+            name: None,
+            bits: Self::worst_case_bits(config),
+            children: vec![length_leaf, element],
+        }
     }
 
     fn encode_with_config<W>(
@@ -319,5 +321,24 @@ mod tests {
         let mut encoder = crate::EncodeVisitor::new(crate::PRECISION, &mut writer);
         let err = value.encode_with_config(&mut encoder, config).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    /// The report (and the decode length check that used to build it) must
+    /// stay `O(1)` in `max_len`: a huge but valid bound must not materialise
+    /// one node per element slot.
+    #[test]
+    fn report_is_compact_for_huge_bounds() {
+        let config = SeqModel {
+            max_len: u32::MAX,
+            elem: (),
+        };
+        let report = <Vec<bool>>::report(&config);
+        // One `length` leaf plus one element template, regardless of the bound.
+        assert_eq!(report.children.len(), 2);
+
+        // The pre-decode length check runs without touching the report tree;
+        // empty input is simply outside the schema's length window.
+        let err = <Vec<bool>>::decode_bytes_with_config(&[], config).unwrap_err();
+        assert!(matches!(err, crate::DecodeError::Length { .. }));
     }
 }

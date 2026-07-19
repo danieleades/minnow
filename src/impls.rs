@@ -215,13 +215,16 @@ where
     }
 
     fn report(config: &Self::Config) -> SizeReport {
-        // Every element has the same config, so compute the (possibly deep)
-        // element report once and clone it per index.
-        let element = T::report(config);
-        let children = (0..N)
-            .map(|i| element.clone().with_name(i.to_string()))
-            .collect();
-        SizeReport::product(children)
+        // A compact tree — one element *template* rather than one node per
+        // element (`N` can be large, and this report is built on every
+        // `decode_bytes` call). The node's bit total is computed
+        // arithmetically instead of summed from children, so it stays exact.
+        let element = T::report(config).with_name(format!("element (× {N})"));
+        SizeReport {
+            name: None,
+            bits: Self::worst_case_bits(config),
+            children: vec![element],
+        }
     }
 
     fn encode_with_config<W>(

@@ -64,6 +64,9 @@ where
 {
     /// Create a new [`IntModel`] over the given inclusive range.
     ///
+    /// Values outside this range are coerced to the nearest bound when
+    /// encoding, matching [`FloatModel`](crate::FloatModel).
+    ///
     /// # Errors
     ///
     /// Returns [`ModelError::InvertedBounds`] if `min > max`, or
@@ -100,13 +103,16 @@ where
     }
 
     /// The offset of `value` from `min`, as a `u128` in `0..denominator()`.
+    ///
+    /// Values outside `min..=max` are clamped to the nearest bound, matching
+    /// [`FloatModel`](crate::FloatModel)'s coercion semantics — so encoding
+    /// an out-of-range integer is lossy, never a panic or a violation of the
+    /// coder's interval contract.
     fn offset(&self, value: T) -> u128 {
-        let diff = to_i128(value) - to_i128(self.min);
-        // Encoding a value outside `min..=max` is a programming error (the
-        // symbol would not belong to this model); `IntModel` is only ever fed
-        // values of the concrete integer type it models, so this cannot
-        // actually go negative in practice.
-        u128::try_from(diff).expect("value is within the configured min..=max range")
+        let clamped = num_traits::clamp(value, self.min, self.max);
+        let diff = to_i128(clamped) - to_i128(self.min);
+        // `clamped >= min`, so the difference is non-negative.
+        u128::try_from(diff).expect("clamped value is at least min")
     }
 
     /// The inverse of [`IntModel::offset`].
@@ -276,5 +282,24 @@ mod tests {
     fn i8_default_spans_full_range() {
         let model = IntModel::<i8>::default();
         assert_eq!(model.denominator(), 256);
+    }
+
+    /// Out-of-range symbols clamp to the nearest bound instead of panicking
+    /// (below `min`) or emitting an interval past the denominator (above
+    /// `max`), which would violate the coder's model contract.
+    #[test]
+    fn out_of_range_symbols_clamp_to_bounds() {
+        let model = IntModel::new(0_u8..=10).unwrap();
+        assert_eq!(
+            Model::probability(&model, &11).unwrap(),
+            Model::probability(&model, &10).unwrap()
+        );
+        assert!(Model::probability(&model, &255).unwrap().end <= model.denominator());
+
+        let signed = IntModel::new(-5_i32..=5).unwrap();
+        assert_eq!(
+            Model::probability(&signed, &-100).unwrap(),
+            Model::probability(&signed, &-5).unwrap()
+        );
     }
 }
