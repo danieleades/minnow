@@ -25,6 +25,16 @@ jobs:
       - run: cargo test --workspace --all-features --all-targets
       - run: cargo test --workspace --all-features --doc
 
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-hack
+      # Check each crate against its declared rust-version, without
+      # dev-dependencies (whose MSRVs don't constrain downstream users).
+      - run: cargo hack check --rust-version --no-dev-deps --workspace
+
   clippy:
     runs-on: ubuntu-latest
     steps:
