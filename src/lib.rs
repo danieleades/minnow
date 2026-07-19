@@ -19,17 +19,25 @@ mod encodeable_custom;
 mod error;
 mod float;
 mod impls;
+mod int;
+mod model_error;
 mod report;
+mod seq;
+mod string;
 mod visitor;
 mod weight;
 
 pub use encodeable::Encodeable;
 pub use encodeable_custom::EncodeableCustom;
-pub use error::DecodeError;
-pub use float::{FloatModel, ModelError};
+pub use error::{DecodeError, EncodeError};
+pub use float::FloatModel;
 pub use impls::{one_shot::OneShot, weighted::WeightedModel};
+pub use int::IntModel;
 pub use minnow_derive::Encodeable;
+pub use model_error::ModelError;
 pub use report::{SizeReport, TERMINATION_BITS};
+pub use seq::SeqModel;
+pub use string::StringModel;
 pub use visitor::{DecodeVisitor, EncodeVisitor};
 pub use weight::Weight;
 

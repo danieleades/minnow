@@ -18,7 +18,7 @@ pub enum MyNestedEnum {
 fn round_trip() {
     let input = MyNestedEnum::B(MyEnum::A(5.0));
 
-    let compressed = input.encode_bytes();
+    let compressed = input.encode_bytes().unwrap();
 
     let output = MyNestedEnum::decode_bytes(&compressed).unwrap();
 

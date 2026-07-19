@@ -1,10 +1,8 @@
-use std::io;
-
 use bitstream_io::{BitRead, BitWrite};
 
 use self::{one_shot::OneShot, weighted::WeightedModel};
 use crate::{
-    DecodeError, DecodeVisitor, EncodeVisitor, SizeReport, Weight,
+    DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, SizeReport, Weight,
     encodeable_custom::EncodeableCustom, float::FloatModel,
 };
 
@@ -55,19 +53,19 @@ where
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: T::Config,
-    ) -> io::Result<()>
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
         // Every value of `Option<T>` costs exactly `log₂(1 + W(T))` bits under
         // the shared weighted discriminant.
         let model = option_discriminant::<T>(&config);
-        match self {
-            Some(x) => {
-                visitor.encode_one(model, &1_u32)?;
-                x.encode_with_config(visitor, config)
-            }
-            None => visitor.encode_one(model, &0_u32),
+        if let Some(x) = self {
+            visitor.encode_one(model, &1_u32)?;
+            x.encode_with_config(visitor, config)
+        } else {
+            visitor.encode_one(model, &0_u32)?;
+            Ok(())
         }
     }
 
@@ -92,6 +90,39 @@ where
     }
 }
 
+impl EncodeableCustom for () {
+    type Config = ();
+
+    fn weight(_config: &Self::Config) -> Weight {
+        // A single encodable value: the unit itself.
+        Weight::ONE
+    }
+
+    fn encode_with_config<W>(
+        &self,
+        _visitor: &mut EncodeVisitor<W>,
+        _config: (),
+    ) -> Result<(), EncodeError>
+    where
+        W: BitWrite,
+    {
+        // Nothing to encode: `weight() == Weight::ONE`, so `()` costs zero
+        // bits on the wire.
+        Ok(())
+    }
+
+    fn decode_with_config<R>(
+        _visitor: &mut DecodeVisitor<R>,
+        _config: (),
+    ) -> Result<Self, DecodeError>
+    where
+        R: BitRead,
+        Self: Sized,
+    {
+        Ok(())
+    }
+}
+
 impl EncodeableCustom for f64 {
     type Config = FloatModel<f64>;
 
@@ -103,11 +134,13 @@ impl EncodeableCustom for f64 {
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: Self::Config,
-    ) -> io::Result<()>
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
-        visitor.encode_one(config, self)
+        let value = config.admit(*self)?;
+        visitor.encode_one(config, &value)?;
+        Ok(())
     }
 
     fn decode_with_config<R>(
@@ -129,13 +162,18 @@ impl EncodeableCustom for bool {
         Weight::new(2)
     }
 
-    fn encode_with_config<W>(&self, visitor: &mut EncodeVisitor<W>, _config: ()) -> io::Result<()>
+    fn encode_with_config<W>(
+        &self,
+        visitor: &mut EncodeVisitor<W>,
+        _config: (),
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
         let model = OneShot::<2>;
         let value = u32::from(*self);
-        visitor.encode_one(model, &value)
+        visitor.encode_one(model, &value)?;
+        Ok(())
     }
 
     fn decode_with_config<R>(
@@ -186,20 +224,23 @@ where
     }
 
     fn report(config: &Self::Config) -> SizeReport {
-        // Every element has the same config, so compute the (possibly deep)
-        // element report once and clone it per index.
-        let element = T::report(config);
-        let children = (0..N)
-            .map(|i| element.clone().with_name(i.to_string()))
-            .collect();
-        SizeReport::product(children)
+        // A compact tree — one element *template* rather than one node per
+        // element (`N` can be large, and this report is built on every
+        // `decode_bytes` call). The node's bit total is computed
+        // arithmetically instead of summed from children, so it stays exact.
+        let element = T::report(config).with_name(format!("element (× {N})"));
+        SizeReport {
+            name: None,
+            bits: Self::worst_case_bits(config),
+            children: vec![element],
+        }
     }
 
     fn encode_with_config<W>(
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: T::Config,
-    ) -> io::Result<()>
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
@@ -255,6 +296,7 @@ mod tests {
     #[test_case(&Option::Some(false))]
     #[test_case(&true)]
     #[test_case(&false)]
+    #[test_case(&())]
     fn round_trip<T>(input: &T)
     where
         T: Encodeable + std::fmt::Debug + PartialEq,
@@ -283,6 +325,7 @@ mod tests {
     #[test_case(&Option::Some(false), ())]
     #[test_case(&true, ())]
     #[test_case(&false, ())]
+    #[test_case(&(), ())]
     #[test_case(&450.0_f64, FloatModel::new(-10000.0..=10000.0, 1).unwrap())]
     #[test_case(&550.0_f64, FloatModel::new(-10000.0..=10000.0, 1).unwrap())]
     #[test_case(&-100.0_f64, FloatModel::new(-5000.0..=0.0, 0).unwrap())]
@@ -311,5 +354,16 @@ mod tests {
         let output = T::decode_with_config(&mut decoder, config).unwrap();
 
         assert_eq!(input, &output);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn unit_type_costs_zero_bits() {
+        assert_eq!(<() as EncodeableCustom>::weight(&()), crate::Weight::ONE);
+        assert_eq!(<() as EncodeableCustom>::worst_case_bits(&()), 0.0);
+        // Zero payload bits still incurs coder-termination overhead, rounded
+        // up to a whole byte.
+        assert_eq!(().encode_bytes().unwrap().len(), 1);
+        assert_eq!(<() as Encodeable>::size_report().total_bytes(), 1);
     }
 }

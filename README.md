@@ -34,7 +34,7 @@ let input = NavigationReport {
     battery_ok: Some(true),
 };
 
-let compressed = input.encode_bytes();
+let compressed = input.encode_bytes().unwrap();
 let output = NavigationReport::decode_bytes(&compressed).unwrap();
 
 assert_eq!(input, output);

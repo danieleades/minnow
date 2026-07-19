@@ -6,37 +6,7 @@ use std::{
 use arithmetic_coding::one_shot;
 use num_traits::Float;
 
-use crate::MAX_DENOMINATOR;
-
-/// An error returned when a model cannot be constructed because its parameters
-/// violate the arithmetic coder's precision invariant (see
-/// [`MAX_DENOMINATOR`](crate::MAX_DENOMINATOR)) or are otherwise invalid.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[non_exhaustive]
-pub enum ModelError {
-    /// One or both of the supplied bounds was `NaN` or infinite.
-    #[error("model bounds must be finite (neither NaN nor infinite)")]
-    NonFiniteBounds,
-
-    /// The lower bound was greater than the upper bound.
-    #[error("model lower bound must not exceed the upper bound")]
-    InvertedBounds,
-
-    /// The resulting denominator exceeds
-    /// [`MAX_DENOMINATOR`](crate::MAX_DENOMINATOR).
-    #[error(
-        "model denominator ({denominator}) exceeds the maximum ({max}) permitted at precision \
-         {precision}; narrow the range or reduce the precision"
-    )]
-    DenominatorTooLarge {
-        /// The denominator that was requested.
-        denominator: u128,
-        /// The maximum permissible denominator.
-        max: u128,
-        /// The arithmetic coder precision in bits.
-        precision: u32,
-    },
-}
+use crate::{EncodeError, MAX_DENOMINATOR, ModelError};
 
 /// A [`Model`](arithmetic_coding::Model) which (lossily) encodes and decodes
 /// floating point values.
@@ -49,6 +19,7 @@ where
     min: F,
     max: F,
     precision: i8,
+    clamping: bool,
 }
 
 impl<F> Default for FloatModel<F>
@@ -68,7 +39,8 @@ where
 {
     /// Create a new [`FloatModel`] with the given range and precision.
     ///
-    /// Values outside this range will be coerced to the nearest bound. The
+    /// Encoding a value outside this range is an [`EncodeError::OutOfRange`]
+    /// unless [clamping](FloatModel::clamping) mode is enabled. The
     /// `precision` is the number of decimal digits retained (it may be
     /// negative to quantise more coarsely than integers).
     ///
@@ -92,6 +64,7 @@ where
             min,
             max,
             precision,
+            clamping: false,
         };
 
         // The denominator is the number of distinguishable values in the range.
@@ -125,13 +98,61 @@ where
         self.scale(self.max) + 1
     }
 
+    /// Enable clamping mode: encoding a value outside `min..=max` clamps it
+    /// to the nearest bound instead of returning
+    /// [`EncodeError::OutOfRange`].
+    ///
+    /// In-range quantisation (rounding to the declared precision) always
+    /// happens and is not affected — its loss is bounded by half a
+    /// quantisation step, which the schema explicitly declares. Saturation
+    /// opts into *unbounded* loss at the boundaries, which is the right
+    /// policy for naturally saturating sources (sensor channels) and the
+    /// wrong one for most everything else — hence opt-in. NaN and infinite
+    /// values are an [`EncodeError::NonFinite`] in every mode: no nearest
+    /// representable value exists.
+    #[must_use]
+    pub const fn clamping(mut self) -> Self {
+        self.clamping = true;
+        self
+    }
+
+    /// Validate `value` against this model's domain, returning the value that
+    /// will actually be encoded.
+    ///
+    /// # Errors
+    ///
+    /// [`EncodeError::NonFinite`] for NaN/infinite values;
+    /// [`EncodeError::OutOfRange`] for values outside `min..=max` unless
+    /// [clamping](FloatModel::clamping) mode is enabled.
+    pub(crate) fn admit(&self, value: F) -> Result<F, EncodeError> {
+        if !value.is_finite() {
+            return Err(EncodeError::NonFinite {
+                value: format!("{value:?}"),
+            });
+        }
+        if value < self.min || value > self.max {
+            if self.clamping {
+                return Ok(num_traits::clamp(value, self.min, self.max));
+            }
+            return Err(EncodeError::OutOfRange {
+                value: format!("{value:?}"),
+                min: format!("{:?}", self.min),
+                max: format!("{:?}", self.max),
+            });
+        }
+        Ok(value)
+    }
+
     fn multiplier(&self) -> F {
         F::from(10_u32).unwrap().powi(self.precision.into())
     }
 
     fn scale(&self, value: F) -> u128 {
-        let input = num_traits::clamp(value, self.min, self.max);
-        let float = ((input - self.min) * self.multiplier()).round();
+        debug_assert!(
+            value >= self.min && value <= self.max,
+            "scale is only called with admitted (in-range) values"
+        );
+        let float = ((value - self.min) * self.multiplier()).round();
         num_traits::ToPrimitive::to_u128(&float).unwrap()
     }
 
@@ -170,8 +191,8 @@ mod tests {
     use arithmetic_coding::fixed_length::Model;
     use test_case::test_case;
 
-    use super::{FloatModel, ModelError};
-    use crate::MAX_DENOMINATOR;
+    use super::FloatModel;
+    use crate::{EncodeError, MAX_DENOMINATOR, ModelError};
 
     #[test]
     fn denominator() {
@@ -179,6 +200,7 @@ mod tests {
             min: 0.0,
             max: 1.0,
             precision: 1,
+            clamping: false,
         };
 
         assert_eq!(model.denominator(), 11);
@@ -187,12 +209,12 @@ mod tests {
     #[test_case(0.0 => 0)]
     #[test_case(0.5 => 5)]
     #[test_case(1.0 => 10)]
-    #[test_case(1.1 => 10)]
     fn scale(input: f64) -> u128 {
         let model = FloatModel {
             min: 0.0,
             max: 1.0,
             precision: 1,
+            clamping: false,
         };
 
         model.scale(input)
@@ -206,6 +228,7 @@ mod tests {
             min: 0.0,
             max: 1.0,
             precision: 1,
+            clamping: false,
         };
 
         model.probability(&input).unwrap()
@@ -221,6 +244,7 @@ mod tests {
             min: 0.0,
             max: 1.0,
             precision: 1,
+            clamping: false,
         };
 
         model.symbol(value)
@@ -264,5 +288,29 @@ mod tests {
         // A billion distinguishable values is far below MAX_DENOMINATOR (2^62).
         const _: () = assert!(MAX_DENOMINATOR > 1_000_000_000);
         assert!(FloatModel::new(0.0..=1_000_000_000.0, 0).is_ok());
+    }
+
+    /// Out-of-range values are an error by default, clamp only under the
+    /// explicit clamping opt-in, and NaN is an error in every mode.
+    #[test]
+    fn admit_semantics() {
+        let strict = FloatModel::new(0.0..=1.0, 1).unwrap();
+        assert!(matches!(
+            strict.admit(1.1),
+            Err(EncodeError::OutOfRange { .. })
+        ));
+        assert!(matches!(
+            strict.admit(f64::NAN),
+            Err(EncodeError::NonFinite { .. })
+        ));
+
+        let clamping = FloatModel::new(0.0..=1.0, 1).unwrap().clamping();
+        assert!((clamping.admit(1.1_f64).unwrap() - 1.0).abs() < f64::EPSILON);
+        assert!(clamping.admit(-5.0_f64).unwrap().abs() < f64::EPSILON);
+        // No nearest representable value exists for NaN, even when clamping.
+        assert!(matches!(
+            clamping.admit(f64::NAN),
+            Err(EncodeError::NonFinite { .. })
+        ));
     }
 }
