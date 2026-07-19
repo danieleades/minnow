@@ -23,7 +23,7 @@ categories = ["compression", "encoding", "parsing"]
 
 [dependencies]
 arithmetic-coding = "0.4"
-bitstream-io = "2"
+bitstream-io = "4"
 minnow-derive = { version = "0.1.0", path = "minnow-derive" }
 num-traits = "0.2.14"
 thiserror = "2"
