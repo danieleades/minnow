@@ -22,7 +22,7 @@ keywords = ["compression", "encoding", "arithmetic-coding", "lossless"]
 categories = ["compression", "encoding", "parsing"]
 
 [dependencies]
-arithmetic-coding = { version = "0.5.0", git = "https://github.com/danieleades/arithmetic-coding", rev = "7f0650d3563c4d9c5afbfcbfab15f5d553648909" }
+arithmetic-coding = "0.5"
 bitstream-io = "4"
 minnow-derive = { version = "0.1.0", path = "minnow-derive" }
 num-traits = "0.2.14"
