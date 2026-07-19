@@ -104,7 +104,7 @@ where
     let mut max = 0usize;
 
     for value in values {
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         let len = bytes.len();
         assert!(
             len <= upper,
@@ -112,7 +112,7 @@ where
         );
         let decoded = T::decode_bytes(&bytes).expect("a valid encoding must decode");
         assert_eq!(
-            decoded.encode_bytes(),
+            decoded.encode_bytes().unwrap(),
             bytes,
             "re-encoding the decoded value must be stable",
         );
@@ -211,7 +211,7 @@ fn option_vehicle_class_is_exactly_two_bits() {
     ];
     let mut lengths = Vec::new();
     for value in values {
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         assert!(bytes.len() <= 1, "should fit in a single byte");
         assert_eq!(Option::<VehicleClass>::decode_bytes(&bytes).unwrap(), value);
         lengths.push(bytes.len());

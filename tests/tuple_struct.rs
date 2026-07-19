@@ -13,7 +13,7 @@ pub struct MyNestedStruct(MyStruct);
 fn round_trip() {
     let input = MyNestedStruct(MyStruct(5.0, 10.0));
 
-    let compressed = input.encode_bytes();
+    let compressed = input.encode_bytes().unwrap();
 
     let output = MyNestedStruct::decode_bytes(&compressed).unwrap();
 

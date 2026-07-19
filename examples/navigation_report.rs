@@ -37,7 +37,7 @@ fn main() {
     // 53 bits. See <https://libdccl.org/3.0/>.
     println!("\nsize report:\n{}", NavigationReport::size_report());
 
-    let compressed = input.encode_bytes();
+    let compressed = input.encode_bytes().unwrap();
 
     println!("bytes: {:x?}, length: {}", compressed, compressed.len());
 

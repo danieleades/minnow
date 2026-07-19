@@ -1,17 +1,19 @@
-use darling::{FromField, FromVariant, export::syn};
+//! Attribute parsing for an enum's variants: each variant's payload fields
+//! (parsed the same way as a struct's, via [`super::parse_struct`]) plus an
+//! optional manual `#[encode(weight = N)]` discriminant override.
 
-use super::{Model, parse_variant_attributes};
+use darling::{FromVariant, ast, export::syn};
 
-#[derive(FromField)]
-pub struct Field {
-    pub ty: syn::Type,
-}
+use super::{Field, parse_variant_attributes};
 
 pub struct Variant {
     pub ident: syn::Ident,
-    pub options: Option<Model>,
     pub weight: Option<u128>,
-    pub fields: darling::ast::Fields<Field>,
+    /// The variant's payload fields. Empty for a unit variant; `style ==
+    /// Tuple` for a tuple variant (`Foo(f64, bool)`); `style == Struct` for a
+    /// struct variant (`Foo { x: f64, y: bool }`). Each field carries its own
+    /// optional payload [`super::Model`] (see [`Field`]).
+    pub fields: ast::Fields<Field>,
 }
 
 impl FromVariant for Variant {
@@ -19,16 +21,48 @@ impl FromVariant for Variant {
         let mut errors = darling::Error::accumulator();
 
         let attributes = errors.handle(parse_variant_attributes(&variant.attrs));
-        let fields = errors.handle(darling::ast::Fields::try_from(&variant.fields));
+        let fields: Option<ast::Fields<Field>> =
+            errors.handle(ast::Fields::try_from(&variant.fields));
 
         errors.finish()?;
 
-        let (options, weight) = attributes.unwrap();
+        // `unwrap()` is safe: `errors.finish()` above already returned early
+        // if either `handle` call recorded an error, so both are `Some` here.
+        let (legacy_model, weight) = attributes.unwrap();
+        let mut fields = fields.unwrap();
+
+        // The legacy form puts a payload model directly on the variant
+        // (`#[encode(float(...))] Foo(f64)`), which only makes sense for a
+        // single-field tuple variant. Fold it into that field so every other
+        // stage of the pipeline only ever looks at field-level models.
+        if let Some(model) = legacy_model {
+            match fields.style {
+                ast::Style::Tuple if fields.fields.len() == 1 => {
+                    let field = &mut fields.fields[0];
+                    if field.model.is_some() {
+                        return Err(darling::Error::custom(
+                            "cannot combine a payload model attribute on the variant with an \
+                             `#[encode]` attribute on its field; put the attribute on the field \
+                             alone",
+                        )
+                        .with_span(&variant.ident));
+                    }
+                    field.model = Some(model);
+                }
+                _ => {
+                    return Err(darling::Error::custom(
+                        "a payload model attribute on the variant itself is only supported for \
+                         single-field tuple variants; put `#[encode]` attributes on the payload \
+                         fields instead",
+                    )
+                    .with_span(&variant.ident));
+                }
+            }
+        }
 
         Ok(Self {
             ident: variant.ident.clone(),
-            fields: fields.unwrap(),
-            options,
+            fields,
             weight,
         })
     }
@@ -78,6 +112,33 @@ mod tests {
             }
         }
         ; "tuple enum w model"
+    )]
+    #[test_case(
+        quote! {
+            #[derive(Debug, Encodeable)]
+            pub enum MyEnum {
+                A {
+                    #[encode(float(min = -10_000.0, max = 10_000.0, precision = 1))]
+                    x: f64,
+                    y: bool,
+                },
+                B,
+            }
+        }
+        ; "struct variant"
+    )]
+    #[test_case(
+        quote! {
+            #[derive(Debug, Encodeable)]
+            pub enum MyEnum {
+                A(
+                    #[encode(float(min = -10_000.0, max = 10_000.0, precision = 1))] f64,
+                    bool,
+                ),
+                B,
+            }
+        }
+        ; "multi field tuple variant"
     )]
     fn parse(tokens: TokenStream) {
         let parsed: syn::DeriveInput = syn::parse2(tokens).unwrap();

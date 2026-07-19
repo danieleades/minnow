@@ -1,0 +1,5 @@
+error: a payload model attribute on the variant itself is only supported for single-field tuple variants; put `#[encode]` attributes on the payload fields instead
+  --> tests/ui/fail/variant_level_model_on_multi_field_tuple.rs:11:5
+   |
+11 |     A(f64, bool),
+   |     ^

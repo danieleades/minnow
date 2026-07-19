@@ -1,3 +1,14 @@
+//! Stage 1 of the derive pipeline (`parse` → `process` → `write`): turn the
+//! `syn::DeriveInput` for a `#[derive(Encodeable)]` struct or enum into a
+//! [`Receiver`] — a `syn`/`darling`-shaped view of the input with every
+//! `#[encode(...)]` attribute parsed into a [`Model`] (and, for enum
+//! variants, an optional manual `weight`) and validated against the coder's
+//! precision invariant.
+//!
+//! This stage owns attribute syntax and macro-expansion-time validation only;
+//! it does not decide *how* a field or variant gets encoded, which is
+//! [`crate::process`]'s job.
+
 use darling::{Error, FromDeriveInput, FromMeta, ast, export::syn};
 use syn::Attribute;
 
@@ -48,6 +59,11 @@ macro_rules! impl_signed_number {
 
 impl_signed_number!(f64);
 impl_signed_number!(i8);
+// `i128` is wide enough to hold the full range of every integer type
+// `IntModel` supports (`u8..=u64`, `i8..=i64`), so `int(min = ..., max =
+// ...)` parses both bounds through this one signed representation regardless
+// of the field's actual integer type; see `Model::config_tokens`.
+impl_signed_number!(i128);
 
 #[derive(FromMeta)]
 pub enum Model {
@@ -55,10 +71,44 @@ pub enum Model {
         min: Number<f64>,
         max: Number<f64>,
         precision: Number<i8>,
+        /// `clamping` opts into coercing out-of-range values to the nearest
+        /// bound instead of an `EncodeError::OutOfRange`.
+        #[darling(default)]
+        clamping: bool,
+    },
+    /// `#[encode(int(min = a, max = b))]` — a bounded integer, uniform over
+    /// `a..=b`. Lowers to `minnow::IntModel::new(a..=b)`; the target integer
+    /// type is inferred from the field, not from this attribute (see
+    /// [`Model::config_tokens`]).
+    Int {
+        min: Number<i128>,
+        max: Number<i128>,
+        /// `clamping` opts into coercing out-of-range values to the nearest
+        /// bound instead of an `EncodeError::OutOfRange`.
+        #[darling(default)]
+        clamping: bool,
     },
     String {
         max_length: usize,
     },
+    /// `#[encode(seq(max_len = N, elem = <expr>))]` — a bounded `Vec<T>`,
+    /// length-prefixed over `0..=N`. `elem` is the per-element config
+    /// expression; it may be omitted when `T::Config: Default`, in which case
+    /// it lowers to `Default::default()` like an unannotated field would.
+    Seq {
+        max_len: u32,
+        #[darling(default)]
+        elem: Option<syn::Expr>,
+    },
+    /// `#[encode(config = <expr>)]` — an arbitrary Rust expression evaluated
+    /// as the field's runtime config. This is the escape hatch every other
+    /// attribute form is sugar for (see [`Model::config_tokens`]); it accepts
+    /// any expression, so it **cannot** be validated at macro-expansion time.
+    /// An invalid or mistyped expression surfaces as an ordinary compile
+    /// error at its interpolation site (e.g. a type mismatch against
+    /// `<FieldType as EncodeableCustom>::Config`) rather than a clean
+    /// macro-time diagnostic.
+    Config(syn::Expr),
 }
 
 impl Model {
@@ -79,58 +129,155 @@ impl Model {
                 min: Number(min),
                 max: Number(max),
                 precision: Number(precision),
-            }) => quote! {
-                minnow::FloatModel::new( #min ..= #max, #precision )
-                    .expect("model bounds validated at compile time")
-            },
-            Some(Self::String { max_length }) => {
-                quote! { minnow::StringModel::new( #max_length ) }
+                clamping,
+            }) => {
+                let clamping = clamping.then(|| quote! { .clamping() });
+                quote! {
+                    minnow::FloatModel::new( #min ..= #max, #precision )
+                        .expect("model bounds validated at compile time")
+                        #clamping
+                }
             }
-            None => quote! {()},
+            Some(Self::Int {
+                min: Number(min),
+                max: Number(max),
+                clamping,
+            }) => {
+                let clamping = clamping.then(|| quote! { .clamping() });
+                // Emit unsuffixed integer literals so their type is inferred
+                // from context (the field's concrete integer type, via
+                // `IntModel<T>`'s `T`) rather than fixed to `i128`.
+                let min = proc_macro2::Literal::i128_unsuffixed(*min);
+                let max = proc_macro2::Literal::i128_unsuffixed(*max);
+                quote! {
+                    minnow::IntModel::new( #min ..= #max )
+                        .expect("model bounds validated at compile time")
+                        #clamping
+                }
+            }
+            Some(Self::String { max_length }) => {
+                quote! {
+                    minnow::StringModel::new( #max_length )
+                        .expect("model bounds validated at compile time")
+                }
+            }
+            Some(Self::Seq { max_len, elem }) => {
+                let elem = elem.as_ref().map_or_else(
+                    || quote! { ::core::default::Default::default() },
+                    |expr| quote! { #expr },
+                );
+                quote! {
+                    minnow::SeqModel { max_len: #max_len, elem: #elem }
+                }
+            }
+            Some(Self::Config(expr)) => quote! { #expr },
+            // Fall back to `Default::default()` rather than a literal `()` so
+            // that a field whose type is a generic parameter with a
+            // non-`()` `Config` (constrained by a `Default` bound the derive
+            // adds — see `write.rs`) still works, not just concrete types
+            // that happen to use `Config = ()`.
+            None => quote! { ::core::default::Default::default() },
         }
     }
 
     /// Validate a model's parameters at macro-expansion time so that invalid
     /// bounds become a clean compile error rather than a runtime panic.
     fn validate(&self) -> Result<(), String> {
-        if let Model::Float {
-            min: Number(min),
-            max: Number(max),
-            precision: Number(precision),
-        } = self
-        {
-            if !min.is_finite() || !max.is_finite() {
-                return Err("float model bounds must be finite (neither NaN nor infinite)".into());
+        match self {
+            Model::Float {
+                min: Number(min),
+                max: Number(max),
+                precision: Number(precision),
+                clamping: _,
+            } => {
+                if !min.is_finite() || !max.is_finite() {
+                    return Err(
+                        "float model bounds must be finite (neither NaN nor infinite)".into(),
+                    );
+                }
+                if min > max {
+                    return Err(format!(
+                        "float model lower bound ({min}) must not exceed the upper bound ({max})"
+                    ));
+                }
+                // This must mirror `FloatModel::new` exactly (same f64
+                // arithmetic, then the same *integer* comparison) so that
+                // anything accepted here is also accepted at runtime.
+                // Comparing in f64 instead would disagree near the boundary,
+                // where `steps + 1.0` rounds back to `MAX_DENOMINATOR`.
+                let multiplier = 10_f64.powi(i32::from(*precision));
+                let steps = ((max - min) * multiplier).round();
+                let steps = num_traits::ToPrimitive::to_u128(&steps).ok_or_else(|| {
+                    format!(
+                        "float model denominator exceeds the maximum ({MAX_DENOMINATOR}) \
+                         permitted at precision 64; narrow the range or reduce the precision"
+                    )
+                })?;
+                // `denominator = steps + 1`; reject before the `+ 1` can
+                // overflow or exceed the bound.
+                if steps >= MAX_DENOMINATOR {
+                    return Err(format!(
+                        "float model denominator ({}) exceeds the maximum ({MAX_DENOMINATOR}) \
+                         permitted at precision 64; narrow the range or reduce the precision",
+                        steps.saturating_add(1)
+                    ));
+                }
+                Ok(())
             }
-            if min > max {
-                return Err(format!(
-                    "float model lower bound ({min}) must not exceed the upper bound ({max})"
-                ));
+            Model::Int {
+                min: Number(min),
+                max: Number(max),
+                clamping: _,
+            } => {
+                if min > max {
+                    return Err(format!(
+                        "int model lower bound ({min}) must not exceed the upper bound ({max})"
+                    ));
+                }
+                // This must mirror `IntModel::new` exactly: an `i128`
+                // difference, then the same integer comparison against
+                // `MAX_DENOMINATOR`.
+                let width = max.checked_sub(*min).ok_or_else(|| {
+                    "int model range width overflows i128; narrow the range".to_string()
+                })?;
+                let width = u128::try_from(width).map_err(|_| {
+                    "int model range width overflows i128; narrow the range".to_string()
+                })?;
+                // `denominator = width + 1`; reject before the `+ 1` can
+                // overflow or exceed the bound.
+                if width >= MAX_DENOMINATOR {
+                    return Err(format!(
+                        "int model denominator ({}) exceeds the maximum ({MAX_DENOMINATOR}) \
+                         permitted at precision 64; narrow the range",
+                        width.saturating_add(1)
+                    ));
+                }
+                Ok(())
             }
-            // This must mirror `FloatModel::new` exactly (same f64 arithmetic,
-            // then the same *integer* comparison) so that anything accepted
-            // here is also accepted at runtime. Comparing in f64 instead would
-            // disagree near the boundary, where `steps + 1.0` rounds back to
-            // `MAX_DENOMINATOR`.
-            let multiplier = 10_f64.powi(i32::from(*precision));
-            let steps = ((max - min) * multiplier).round();
-            let steps = num_traits::ToPrimitive::to_u128(&steps).ok_or_else(|| {
-                format!(
-                    "float model denominator exceeds the maximum ({MAX_DENOMINATOR}) permitted at \
-                     precision 64; narrow the range or reduce the precision"
-                )
-            })?;
-            // `denominator = steps + 1`; reject before the `+ 1` can overflow
-            // or exceed the bound.
-            if steps >= MAX_DENOMINATOR {
-                return Err(format!(
-                    "float model denominator ({}) exceeds the maximum ({MAX_DENOMINATOR}) \
-                     permitted at precision 64; narrow the range or reduce the precision",
-                    steps.saturating_add(1)
-                ));
+            Model::String { max_length } => {
+                // Mirrors `StringModel::new`: the only way construction can
+                // fail is `max_length` not fitting in the `u32` that backs
+                // `SeqModel::max_len` — a `u32`-bounded length model's
+                // denominator (`max_length + 1 <= 2^32`) is always far below
+                // `MAX_DENOMINATOR` (`~2^62`), so that's the only check
+                // needed here.
+                if u32::try_from(*max_length).is_err() {
+                    return Err(format!(
+                        "string max_length ({max_length}) exceeds the maximum representable \
+                         length ({})",
+                        u32::MAX
+                    ));
+                }
+                Ok(())
             }
+            // `Seq`'s `max_len` is already a `u32` by construction (parsed as
+            // one), and a `u32`-bounded length model's denominator can never
+            // exceed `MAX_DENOMINATOR` (see the `String` case above), so
+            // there is nothing further to validate here. The `elem`
+            // expression, like `Config`, cannot be checked at macro-expansion
+            // time.
+            Model::Seq { .. } | Model::Config(_) => Ok(()),
         }
-        Ok(())
     }
 }
 
@@ -285,6 +432,36 @@ mod tests {
         }
         ; "unit enum"
     )]
+    #[test_case(
+        quote! {
+            #[derive(Encodeable)]
+            pub struct Reading {
+                #[encode(int(min = -10, max = 10))]
+                pub x: i32,
+            }
+        }
+        ; "int"
+    )]
+    #[test_case(
+        quote! {
+            #[derive(Encodeable)]
+            pub struct Reading {
+                #[encode(seq(max_len = 8, elem = minnow::FloatModel::new(0.0..=1.0, 1).unwrap()))]
+                pub samples: Vec<f64>,
+            }
+        }
+        ; "seq with elem"
+    )]
+    #[test_case(
+        quote! {
+            #[derive(Encodeable)]
+            pub struct Reading {
+                #[encode(seq(max_len = 8))]
+                pub flags: Vec<bool>,
+            }
+        }
+        ; "seq without elem"
+    )]
     fn parse(tokens: TokenStream) {
         let parsed: syn::DeriveInput = syn::parse2(tokens).unwrap();
         let _receiver = Receiver::from_derive_input(&parsed).unwrap();
@@ -304,7 +481,64 @@ mod tests {
             min: Number(0.0),
             max: Number(max),
             precision: Number(0),
+            clamping: false,
         };
         model.validate().is_ok()
+    }
+
+    /// The macro-time integer bounds check must agree with `IntModel::new`
+    /// exactly at the `MAX_DENOMINATOR` boundary. Unlike the float case this
+    /// is exact-integer arithmetic on both sides, so agreement is
+    /// straightforward — but still worth pinning down with a test.
+    #[test_case(4_611_686_018_427_387_902 => true; "largest width below the boundary is accepted")]
+    #[test_case(4_611_686_018_427_387_903 => false; "width equal to MAX_DENOMINATOR is rejected")]
+    fn int_boundary_agrees_with_runtime(max: i128) -> bool {
+        use super::{Model, Number};
+        let model = Model::Int {
+            min: Number(0),
+            max: Number(max),
+            clamping: false,
+        };
+        model.validate().is_ok()
+    }
+
+    #[test]
+    fn int_rejects_inverted_bounds() {
+        use super::{Model, Number};
+        let model = Model::Int {
+            min: Number(10),
+            max: Number(-10),
+            clamping: false,
+        };
+        assert!(model.validate().is_err());
+    }
+
+    #[test]
+    fn int_accepts_negative_range() {
+        use super::{Model, Number};
+        let model = Model::Int {
+            min: Number(-10),
+            max: Number(10),
+            clamping: false,
+        };
+        assert!(model.validate().is_ok());
+    }
+
+    #[test]
+    fn string_rejects_max_length_over_u32() {
+        use super::Model;
+        let model = Model::String {
+            max_length: u32::MAX as usize + 1,
+        };
+        assert!(model.validate().is_err());
+    }
+
+    #[test]
+    fn string_accepts_max_length_at_u32_max() {
+        use super::Model;
+        let model = Model::String {
+            max_length: u32::MAX as usize,
+        };
+        assert!(model.validate().is_ok());
     }
 }
