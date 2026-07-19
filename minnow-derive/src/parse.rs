@@ -24,9 +24,9 @@ pub struct Receiver {
 
 /// A signed number parsed from attribute meta.
 ///
-/// darling 0.20 rejects bare negative literals in attributes (it expects them
+/// darling rejects bare negative literals in attributes (it expects them
 /// quoted), which would break the ergonomic `min = -10_000.0` syntax. This
-/// wrapper restores support by peeling a leading unary `-`.
+/// wrapper supports them by peeling a leading unary `-`.
 #[derive(Debug, Clone, Copy)]
 pub struct Number<T>(pub T);
 

@@ -216,9 +216,8 @@ where
         Self: Sized,
     {
         // Decode into an array of `Option<T>` so that a decode failure part-way
-        // through does not require conjuring a `T` out of thin air (as the old
-        // `MaybeUninit::assume_init` did — instant undefined behaviour). Once
-        // every element has decoded successfully, unwrap them into `[T; N]`.
+        // through does not require conjuring a `T` out of thin air. Once every
+        // element has decoded successfully, unwrap them into `[T; N]`.
         let mut error: Option<DecodeError> = None;
         let decoded: [Option<T>; N] = std::array::from_fn(|_| {
             if error.is_some() {

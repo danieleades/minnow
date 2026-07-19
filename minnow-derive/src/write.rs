@@ -119,8 +119,6 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
         .map(|(i, v)| variant_parts(i, v))
         .collect();
 
-    // Consume `ident` (rather than borrow) so the whole `EnumData` is used by
-    // value, keeping the signature free of `clippy::needless_pass_by_value`.
     let ident = enum_data.ident;
 
     let encode_arms = parts.iter().map(|p| &p.encode_arm);

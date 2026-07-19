@@ -106,10 +106,16 @@ impl Weight {
 
     /// Saturating multiplication (the product rule for structs / arrays).
     ///
-    /// Saturation is sticky: if either operand is saturated, or the exact
-    /// product would overflow, the result is [`Weight::SATURATED`].
+    /// [`Weight::ZERO`] annihilates *exactly*, even against a saturated
+    /// operand: a product containing a zero-cardinality component has no
+    /// values at all, however large the other factors. Otherwise saturation
+    /// is sticky: if either operand is saturated, or the exact product would
+    /// overflow, the result is [`Weight::SATURATED`].
     #[must_use]
     pub const fn saturating_mul(self, rhs: Self) -> Self {
+        if self.0 == 0 || rhs.0 == 0 {
+            return Self::ZERO;
+        }
         if self.is_saturated() || rhs.is_saturated() {
             return Self::SATURATED;
         }
@@ -190,6 +196,15 @@ mod tests {
         assert!((sum + Weight::ONE).is_saturated());
         assert!((sum * Weight::new(2)).is_saturated());
         assert_eq!(sum, Weight::SATURATED);
+    }
+
+    #[test]
+    fn zero_annihilates_even_when_saturated() {
+        // `0 × w = 0` holds exactly for every operand, including a saturated
+        // one — a product containing an empty component has no values.
+        assert_eq!(Weight::SATURATED * Weight::ZERO, Weight::ZERO);
+        assert_eq!(Weight::ZERO * Weight::SATURATED, Weight::ZERO);
+        assert_eq!(Weight::ZERO.pow(3), Weight::ZERO);
     }
 
     #[test]

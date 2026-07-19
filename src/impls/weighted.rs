@@ -32,8 +32,11 @@ use crate::MAX_DENOMINATOR;
 #[derive(Debug, Clone)]
 pub struct WeightedModel {
     /// Cumulative sums: `cumulative[0] = 0`, `cumulative[i+1] = cumulative[i] +
-    /// wᵢ`, so `cumulative.last() == S`. Length is `k + 1`.
+    /// wᵢ`. Length is `k + 1`.
     cumulative: Vec<u128>,
+    /// The total denominator `S = Σ wᵢ` (after any rescaling), fixed at
+    /// construction.
+    total: u128,
 }
 
 impl WeightedModel {
@@ -71,7 +74,10 @@ impl WeightedModel {
             cumulative.push(acc);
         }
 
-        Self { cumulative }
+        Self {
+            cumulative,
+            total: acc,
+        }
     }
 
     /// The number of symbols the model describes.
@@ -90,9 +96,7 @@ impl WeightedModel {
     /// The total denominator `S` (after any rescaling).
     #[must_use]
     pub fn total(&self) -> u128 {
-        // The cumulative table always holds at least the leading `0`, so `last`
-        // is never `None`; `unwrap_or` keeps this panic-free regardless.
-        self.cumulative.last().copied().unwrap_or(0)
+        self.total
     }
 
     /// The (possibly rescaled) interval width of symbol `index`.
