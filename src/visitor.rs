@@ -8,19 +8,19 @@ use crate::DecodeError;
 /// A visitor that encodes the fields of a struct into a writer
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub struct EncodeVisitor<'a, W>
+pub struct EncodeVisitor<W>
 where
     W: BitWrite,
 {
-    state: Option<State<'a, u128, W>>,
+    state: Option<State<u128, W>>,
 }
 
-impl<'a, W> EncodeVisitor<'a, W>
+impl<W> EncodeVisitor<W>
 where
     W: BitWrite,
 {
     /// Create a new [`EncodeVisitor`].
-    pub fn new(precision: u32, writer: &'a mut W) -> Self {
+    pub fn new(precision: u32, writer: W) -> Self {
         Self {
             state: Some(State::new(precision, writer)),
         }
@@ -76,7 +76,7 @@ where
     /// cannot happen through the public API.
     pub fn flush(&mut self) -> io::Result<()> {
         self.state
-            .as_mut()
+            .take()
             .expect("encoder state is always present")
             .flush()
     }
