@@ -51,7 +51,7 @@ impl Rng {
             1 => Shape::Circle(self.range(0.0, 1_000.0), self.range(-1_000.0, 1_000.0)),
             _ => Shape::Rectangle {
                 width: self.range(0.0, 1_000.0),
-                height: self.next_u64() % 2 == 0,
+                height: self.next_u64().is_multiple_of(2),
             },
         }
     }
