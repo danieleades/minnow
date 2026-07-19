@@ -1,4 +1,4 @@
-use darling::{FromField, FromVariant};
+use darling::{FromField, FromVariant, export::syn};
 
 use super::{Model, parse_variant_attributes};
 
@@ -36,7 +36,7 @@ impl FromVariant for Variant {
 
 #[cfg(test)]
 mod tests {
-    use darling::FromDeriveInput;
+    use darling::{FromDeriveInput, export::syn};
     use proc_macro2::TokenStream;
     use quote::quote;
     use test_case::test_case;

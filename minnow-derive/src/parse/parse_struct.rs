@@ -1,4 +1,4 @@
-use darling::FromField;
+use darling::{FromField, export::syn};
 use proc_macro2::TokenStream;
 
 use super::{Model, parse_attributes};

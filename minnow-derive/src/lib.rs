@@ -3,7 +3,7 @@
 #![deny(clippy::all, clippy::cargo)]
 #![warn(clippy::pedantic)]
 
-use darling::FromDeriveInput;
+use darling::{FromDeriveInput, export::syn};
 use proc_macro::TokenStream;
 use process::process;
 use syn::parse_macro_input;
