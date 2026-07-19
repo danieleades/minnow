@@ -1,4 +1,4 @@
-use darling::ast;
+use darling::{ast, export::syn};
 
 use crate::parse;
 

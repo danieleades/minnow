@@ -1,3 +1,4 @@
+use darling::export::syn;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;

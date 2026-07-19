@@ -1,4 +1,4 @@
-use darling::{Error, FromDeriveInput, FromMeta, ast};
+use darling::{Error, FromDeriveInput, FromMeta, ast, export::syn};
 use syn::Attribute;
 
 pub mod parse_enum;
@@ -247,7 +247,7 @@ fn parse_attributes(attrs: &[syn::Attribute]) -> darling::Result<Option<Model>> 
 
 #[cfg(test)]
 mod tests {
-    use darling::FromDeriveInput;
+    use darling::{FromDeriveInput, export::syn};
     use proc_macro2::TokenStream;
     use quote::quote;
     use test_case::test_case;

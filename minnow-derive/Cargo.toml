@@ -17,7 +17,6 @@ darling = "0.23"
 num-traits = "0.2"
 proc-macro2 = "1.0.37"
 quote = "1.0.17"
-syn = "2"
 
 [dev-dependencies]
 proc-macro2 = "1.0.37"
