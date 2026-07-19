@@ -3,7 +3,7 @@
 //! hand-writes its `Encodeable` impl to show what the derive used to be
 //! unable to generate.
 
-use minnow::Encodeable;
+use minnow::{Bounded, Encodeable};
 
 #[derive(Debug, Encodeable)]
 pub enum Shape {

@@ -2,8 +2,8 @@ use bitstream_io::{BitRead, BitWrite};
 
 use self::{one_shot::OneShot, weighted::WeightedModel};
 use crate::{
-    DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, SizeReport, Weight,
-    encodeable_custom::EncodeableCustom, float::FloatModel,
+    Bounded, DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, Encodeable, SizeReport,
+    Weight, float::FloatModel,
 };
 
 pub mod one_shot;
@@ -17,17 +17,15 @@ pub mod weighted;
 /// apart, corrupting either the wire format or the pre-decode length window.
 fn option_discriminant<T>(config: &T::Config) -> WeightedModel
 where
-    T: EncodeableCustom,
+    T: Bounded,
 {
     WeightedModel::new([1, T::weight(config).get()])
 }
 
-impl<T> EncodeableCustom for Option<T>
+impl<T> Bounded for Option<T>
 where
-    T: EncodeableCustom,
+    T: Bounded,
 {
-    type Config = T::Config;
-
     fn weight(config: &Self::Config) -> Weight {
         // Sum rule: `None` contributes one value, `Some(x)` contributes `W(T)`.
         Weight::ONE + T::weight(config)
@@ -48,6 +46,18 @@ where
         let some_bits = model.discriminant_bits(1) + T::best_case_bits(config);
         none_bits.min(some_bits)
     }
+}
+
+// `Option<T>`'s *codec* requires `T: Bounded`, not just `T: Encodeable`: the
+// discriminant's interval widths are `{None: 1, Some: W(T)}`, so encoding is
+// itself defined in terms of `T`'s cardinality. An `Option` of an unbounded
+// type would need a differently-weighted discriminant model — a follow-up,
+// not a hole: the type system states the requirement exactly.
+impl<T> Encodeable for Option<T>
+where
+    T: Bounded,
+{
+    type Config = T::Config;
 
     fn encode_with_config<W>(
         &self,
@@ -90,13 +100,15 @@ where
     }
 }
 
-impl EncodeableCustom for () {
-    type Config = ();
-
+impl Bounded for () {
     fn weight(_config: &Self::Config) -> Weight {
         // A single encodable value: the unit itself.
         Weight::ONE
     }
+}
+
+impl Encodeable for () {
+    type Config = ();
 
     fn encode_with_config<W>(
         &self,
@@ -123,12 +135,14 @@ impl EncodeableCustom for () {
     }
 }
 
-impl EncodeableCustom for f64 {
-    type Config = FloatModel<f64>;
-
+impl Bounded for f64 {
     fn weight(config: &Self::Config) -> Weight {
         Weight::new(config.denominator())
     }
+}
+
+impl Encodeable for f64 {
+    type Config = FloatModel<f64>;
 
     fn encode_with_config<W>(
         &self,
@@ -155,12 +169,14 @@ impl EncodeableCustom for f64 {
     }
 }
 
-impl EncodeableCustom for bool {
-    type Config = ();
-
+impl Bounded for bool {
     fn weight(_config: &Self::Config) -> Weight {
         Weight::new(2)
     }
+}
+
+impl Encodeable for bool {
+    type Config = ();
 
     fn encode_with_config<W>(
         &self,
@@ -195,13 +211,11 @@ impl EncodeableCustom for bool {
     }
 }
 
-impl<T, const N: usize> EncodeableCustom for [T; N]
+impl<T, const N: usize> Bounded for [T; N]
 where
-    T: EncodeableCustom,
+    T: Bounded,
     T::Config: Clone,
 {
-    type Config = T::Config;
-
     fn weight(config: &Self::Config) -> Weight {
         // Product rule: `W([T; N]) = W(T)^N`.
         #[allow(clippy::cast_possible_truncation)]
@@ -235,6 +249,17 @@ where
             children: vec![element],
         }
     }
+}
+
+// Unlike `Option`, an array's codec has no discriminant, so it needs only
+// `T: Encodeable` — a fixed-size array of an unbounded type encodes fine (it
+// just has no size budget).
+impl<T, const N: usize> Encodeable for [T; N]
+where
+    T: Encodeable,
+    T::Config: Clone,
+{
+    type Config = T::Config;
 
     fn encode_with_config<W>(
         &self,
@@ -287,10 +312,7 @@ mod tests {
     use bitstream_io::{BigEndian, BitReader, BitWrite, BitWriter};
     use test_case::test_case;
 
-    use crate::{
-        DecodeVisitor, EncodeVisitor, Encodeable, PRECISION, encodeable_custom::EncodeableCustom,
-        float::FloatModel,
-    };
+    use crate::{Bounded, DecodeVisitor, EncodeVisitor, Encodeable, PRECISION, float::FloatModel};
 
     #[test_case(&Option::Some(true))]
     #[test_case(&Option::Some(false))]
@@ -300,6 +322,7 @@ mod tests {
     fn round_trip<T>(input: &T)
     where
         T: Encodeable + std::fmt::Debug + PartialEq,
+        T::Config: Default,
     {
         let mut bit_writer = BitWriter::endian(Vec::new(), BigEndian);
 
@@ -331,7 +354,7 @@ mod tests {
     #[test_case(&-100.0_f64, FloatModel::new(-5000.0..=0.0, 0).unwrap())]
     fn round_trip_with_config<T>(input: &T, config: T::Config)
     where
-        T: EncodeableCustom + std::fmt::Debug + PartialEq,
+        T: Encodeable + std::fmt::Debug + PartialEq,
         T::Config: Clone,
     {
         let mut bit_writer = BitWriter::endian(Vec::new(), BigEndian);
@@ -359,11 +382,11 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn unit_type_costs_zero_bits() {
-        assert_eq!(<() as EncodeableCustom>::weight(&()), crate::Weight::ONE);
-        assert_eq!(<() as EncodeableCustom>::worst_case_bits(&()), 0.0);
+        assert_eq!(<() as Bounded>::weight(&()), crate::Weight::ONE);
+        assert_eq!(<() as Bounded>::worst_case_bits(&()), 0.0);
         // Zero payload bits still incurs coder-termination overhead, rounded
         // up to a whole byte.
         assert_eq!(().encode_bytes().unwrap().len(), 1);
-        assert_eq!(<() as Encodeable>::size_report().total_bytes(), 1);
+        assert_eq!(<() as Bounded>::size_report().total_bytes(), 1);
     }
 }

@@ -1,7 +1,7 @@
 //! Round-trip tests for `String` (issue #3), both hand-configured
 //! (`StringModel`) and via the `#[encode(string(...))]` derive sugar.
 
-use minnow::{DecodeError, Encodeable, EncodeableCustom, StringModel};
+use minnow::{DecodeError, Encodeable, StringModel};
 
 #[derive(Debug, Encodeable, PartialEq, Clone)]
 pub struct Message {

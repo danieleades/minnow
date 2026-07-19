@@ -53,7 +53,7 @@ use arithmetic_coding::one_shot;
 use bitstream_io::{BitRead, BitWrite};
 
 use crate::{
-    DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, EncodeableCustom, SizeReport, Weight,
+    Bounded, DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, Encodeable, SizeReport, Weight,
 };
 
 /// A uniform one-shot model over `0..=max_len` — the length prefix shared by
@@ -103,13 +103,11 @@ pub struct SeqModel<C> {
     pub elem: C,
 }
 
-impl<T, C> EncodeableCustom for Vec<T>
+impl<T, C> Bounded for Vec<T>
 where
-    T: EncodeableCustom<Config = C>,
+    T: Bounded<Config = C>,
     C: Clone,
 {
-    type Config = SeqModel<C>;
-
     fn weight(config: &Self::Config) -> Weight {
         let elem_weight = T::weight(&config.elem);
 
@@ -166,6 +164,19 @@ where
             children: vec![length_leaf, element],
         }
     }
+}
+
+// The codec needs only `T: Encodeable`: the length prefix is *uniform* over
+// `0..=max_len` (see the module docs), so unlike `Option`'s weighted
+// discriminant it never consults the element's cardinality. A bounded-length
+// `Vec` of an unbounded element type therefore encodes fine — it just has no
+// size budget.
+impl<T, C> Encodeable for Vec<T>
+where
+    T: Encodeable<Config = C>,
+    C: Clone,
+{
+    type Config = SeqModel<C>;
 
     fn encode_with_config<W>(
         &self,
@@ -241,7 +252,7 @@ mod tests {
     use arithmetic_coding::one_shot::Model;
 
     use super::{LengthModel, SeqModel};
-    use crate::{EncodeableCustom, Weight};
+    use crate::{Bounded, Encodeable, Weight};
 
     #[test]
     fn length_model_covers_full_range() {
@@ -260,10 +271,7 @@ mod tests {
             max_len: 3,
             elem: (),
         };
-        assert_eq!(
-            <Vec<bool> as EncodeableCustom>::weight(&config),
-            Weight::new(15)
-        );
+        assert_eq!(<Vec<bool> as Bounded>::weight(&config), Weight::new(15));
     }
 
     #[test]
@@ -276,7 +284,7 @@ mod tests {
             elem: (),
         };
         assert_eq!(
-            <Vec<()> as EncodeableCustom>::weight(&config),
+            <Vec<()> as Bounded>::weight(&config),
             Weight::new(u128::from(u32::MAX) + 1)
         );
     }
@@ -292,9 +300,9 @@ mod tests {
 
         // The empty vector is the cheapest value: just the length prefix,
         // `log2(11)` bits.
-        let best_bits = <Vec<bool> as EncodeableCustom>::best_case_bits(&config);
+        let best_bits = <Vec<bool> as Bounded>::best_case_bits(&config);
         assert!((best_bits - 11_f64.log2()).abs() < 1e-9);
-        assert!(bytes.len() <= <Vec<bool> as EncodeableCustom>::report(&config).total_bytes());
+        assert!(bytes.len() <= <Vec<bool> as Bounded>::report(&config).total_bytes());
     }
 
     #[test]

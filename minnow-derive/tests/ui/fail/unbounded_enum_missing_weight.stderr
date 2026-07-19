@@ -1,0 +1,5 @@
+error: an `#[encode(unbounded)]` enum requires an explicit `#[encode(weight = N)]` on every variant: automatic discriminant weighting uses payload cardinalities, which an unbounded schema does not have
+  --> tests/ui/fail/unbounded_enum_missing_weight.rs:11:5
+   |
+11 |     Unweighted,
+   |     ^^^^^^^^^^

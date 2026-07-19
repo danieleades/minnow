@@ -1,4 +1,4 @@
-use minnow::{Encodeable, EncodeableCustom, FloatModel, SizeReport, Weight};
+use minnow::{Bounded, Encodeable, FloatModel, SizeReport, Weight};
 
 #[derive(Debug)]
 pub enum MyEnum {
@@ -17,7 +17,13 @@ fn y_model() -> FloatModel<f64> {
 }
 
 impl Encodeable for MyEnum {
-    fn encode<W>(&self, visitor: &mut minnow::EncodeVisitor<W>) -> Result<(), minnow::EncodeError>
+    type Config = ();
+
+    fn encode_with_config<W>(
+        &self,
+        visitor: &mut minnow::EncodeVisitor<W>,
+        _config: (),
+    ) -> Result<(), minnow::EncodeError>
     where
         W: bitstream_io::BitWrite,
     {
@@ -36,7 +42,10 @@ impl Encodeable for MyEnum {
         Ok(())
     }
 
-    fn decode<R>(visitor: &mut minnow::DecodeVisitor<R>) -> Result<Self, minnow::DecodeError>
+    fn decode_with_config<R>(
+        visitor: &mut minnow::DecodeVisitor<R>,
+        _config: (),
+    ) -> Result<Self, minnow::DecodeError>
     where
         R: bitstream_io::BitRead,
         Self: Sized,
@@ -54,12 +63,34 @@ impl Encodeable for MyEnum {
             }),
         }
     }
+}
 
-    fn size_report() -> SizeReport {
-        // This impl encodes the discriminant with a *uniform* `OneShot::<2>`
-        // model, so each variant's discriminant costs exactly 1 bit, and the
-        // report must say so. (A derived impl would use a weighted
-        // discriminant instead.)
+/// Implementing [`Bounded`] is the promise that every value fits a static
+/// budget; `weight` is the only required method, but this impl encodes the
+/// discriminant with a *uniform* `OneShot::<2>` model (1 bit per variant, not
+/// the cardinality-weighted split a derived impl would use), so the bit
+/// bounds and the report must be overridden to say what the codec actually
+/// does.
+impl Bounded for MyEnum {
+    fn weight(_config: &Self::Config) -> Weight {
+        // The true cardinality — sum over variants, product over fields —
+        // regardless of how the discriminant is weighted on the wire.
+        let a = Weight::new(x_model().denominator()) * Weight::new(y_model().denominator());
+        a + Weight::ONE
+    }
+
+    fn worst_case_bits(_config: &Self::Config) -> f64 {
+        // Variant `A`: 1 discriminant bit plus both payload fields.
+        1.0 + Weight::new(x_model().denominator()).log2()
+            + Weight::new(y_model().denominator()).log2()
+    }
+
+    fn best_case_bits(_config: &Self::Config) -> f64 {
+        // Variant `B`: just the discriminant bit.
+        1.0
+    }
+
+    fn report(_config: &Self::Config) -> SizeReport {
         let x_bits = Weight::new(x_model().denominator()).log2();
         let y_bits = Weight::new(y_model().denominator()).log2();
         SizeReport::sum(vec![

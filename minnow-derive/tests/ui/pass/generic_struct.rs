@@ -1,4 +1,4 @@
-// A generic struct: the derive adds the `EncodeableCustom`/`Config: Default`
+// A generic struct: the derive adds the `Encodeable`/`Bounded`/`Config: Default`
 // bounds itself, so the user doesn't have to spell them out.
 use minnow_derive::Encodeable;
 

@@ -1,7 +1,7 @@
 //! Generic structs (and enums): `generics.split_for_impl()` plus derive-added
-//! `EncodeableCustom` bounds, exercised end-to-end.
+//! `Encodeable`/`Bounded` bounds, exercised end-to-end.
 
-use minnow::Encodeable;
+use minnow::{Bounded, Encodeable};
 
 #[derive(Debug, Encodeable, PartialEq, Clone, Copy)]
 pub struct Wrapper<T> {
@@ -52,5 +52,8 @@ fn generic_enum_round_trips() {
 #[test]
 fn generic_struct_weight_matches_field_weight() {
     // `Wrapper<bool>` has exactly as many values as `bool` itself.
-    assert_eq!(Wrapper::<bool>::worst_case_bits(), bool::worst_case_bits());
+    assert_eq!(
+        <Wrapper<bool> as Bounded>::worst_case_bits(&()),
+        <bool as Bounded>::worst_case_bits(&())
+    );
 }

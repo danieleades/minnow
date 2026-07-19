@@ -15,7 +15,7 @@ use arithmetic_coding::one_shot;
 use num_traits::PrimInt;
 
 use crate::{
-    DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, EncodeableCustom, MAX_DENOMINATOR,
+    Bounded, DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, Encodeable, MAX_DENOMINATOR,
     ModelError, PRECISION, Weight,
 };
 
@@ -181,8 +181,8 @@ where
     }
 }
 
-/// Implement [`EncodeableCustom`] for a primitive integer type `$t`, whose
-/// config is `IntModel<$t>`.
+/// Implement [`Encodeable`] and [`Bounded`] for a primitive integer type
+/// `$t`, whose config is `IntModel<$t>`.
 ///
 /// The `@default` variant additionally gives the type a [`Default`]
 /// `IntModel` spanning its entire native range (`$t::MIN..=$t::MAX`), which
@@ -201,12 +201,14 @@ macro_rules! impl_int_leaf {
         impl_int_leaf!(@no_default $t);
     };
     (@no_default $t:ty) => {
-        impl EncodeableCustom for $t {
-            type Config = IntModel<$t>;
-
+        impl Bounded for $t {
             fn weight(config: &Self::Config) -> Weight {
                 Weight::new(config.denominator())
             }
+        }
+
+        impl Encodeable for $t {
+            type Config = IntModel<$t>;
 
             fn encode_with_config<W>(
                 &self,

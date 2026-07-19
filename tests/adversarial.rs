@@ -5,7 +5,7 @@
 //! and truncated byte strings through `decode_bytes` for a few representative
 //! types and assert only that the process does not panic.
 
-use minnow::{Encodeable, EncodeableCustom};
+use minnow::Encodeable;
 
 #[derive(Debug, Encodeable, PartialEq)]
 pub enum VehicleClass {
@@ -62,7 +62,10 @@ impl Rng {
 }
 
 /// Decode `bytes` as `T` and assert the call returns (never panics).
-fn assert_no_panic<T: Encodeable>(bytes: &[u8]) {
+fn assert_no_panic<T: minnow::Bounded>(bytes: &[u8])
+where
+    T::Config: Default,
+{
     // The result is deliberately ignored: either outcome (`Ok`/`Err`) is
     // acceptable, we only require that decoding terminates without panicking.
     let _ = T::decode_bytes(bytes);
@@ -86,14 +89,14 @@ fn random_bytes_never_panic() {
         // `Vec`/`String` have no `Default` config (there is no sensible
         // universal `max_len`/`max_length`), so they aren't `Encodeable` and
         // must be exercised through `decode_bytes_with_config` directly.
-        let _ = <Vec<bool> as minnow::EncodeableCustom>::decode_bytes_with_config(
+        let _ = <Vec<bool> as minnow::Encodeable>::decode_bytes_with_config(
             &buf,
             minnow::SeqModel {
                 max_len: 6,
                 elem: (),
             },
         );
-        let _ = <String as minnow::EncodeableCustom>::decode_bytes_with_config(
+        let _ = <String as minnow::Encodeable>::decode_bytes_with_config(
             &buf,
             minnow::StringModel::new(12).unwrap(),
         );
@@ -167,25 +170,25 @@ fn corrupt_and_truncated_sequences_never_panic_or_oom() {
         rng.fill(&mut buf);
 
         if let Ok(decoded) =
-            <Vec<bool> as minnow::EncodeableCustom>::decode_bytes_with_config(&buf, seq_config)
+            <Vec<bool> as minnow::Encodeable>::decode_bytes_with_config(&buf, seq_config)
         {
             assert!(decoded.len() <= seq_config.max_len as usize);
         }
         if let Ok(decoded) =
-            <String as minnow::EncodeableCustom>::decode_bytes_with_config(&buf, string_config)
+            <String as minnow::Encodeable>::decode_bytes_with_config(&buf, string_config)
         {
             assert!(decoded.len() <= string_config.max_length());
         }
     }
 
     for len in 0..=valid_vec_bytes.len() {
-        let _ = <Vec<bool> as minnow::EncodeableCustom>::decode_bytes_with_config(
+        let _ = <Vec<bool> as minnow::Encodeable>::decode_bytes_with_config(
             &valid_vec_bytes[..len],
             seq_config,
         );
     }
     for len in 0..=valid_string_bytes.len() {
-        let _ = <String as minnow::EncodeableCustom>::decode_bytes_with_config(
+        let _ = <String as minnow::Encodeable>::decode_bytes_with_config(
             &valid_string_bytes[..len],
             string_config,
         );

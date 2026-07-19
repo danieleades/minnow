@@ -1,7 +1,7 @@
 //! Manual `#[encode(weight = N)]` discriminant overrides bias the code toward
 //! the heavier variants (fewer bits) at the expense of the lighter ones.
 
-use minnow::{Encodeable, EncodeableCustom};
+use minnow::{Bounded, Encodeable};
 
 #[derive(Debug, Encodeable, PartialEq, Clone, Copy)]
 pub enum Biased {
@@ -14,12 +14,12 @@ pub enum Biased {
 fn override_makes_the_heavy_variant_cheaper() {
     // The override only changes the *coding* weights, not the cardinality: the
     // type still has exactly two distinct values.
-    assert_eq!(<Biased as EncodeableCustom>::weight(&()).get(), 2);
+    assert_eq!(<Biased as Bounded>::weight(&()).get(), 2);
 
     // ...but the worst case is now far above `log2(2) = 1` bit, because `Rare`
     // pays for `Common`'s cheapness.
-    let worst = <Biased as EncodeableCustom>::worst_case_bits(&());
-    let best = <Biased as EncodeableCustom>::best_case_bits(&());
+    let worst = <Biased as Bounded>::worst_case_bits(&());
+    let best = <Biased as Bounded>::best_case_bits(&());
     assert!(
         worst > 9.0,
         "Rare should cost ~log2(1001) bits, got {worst}"

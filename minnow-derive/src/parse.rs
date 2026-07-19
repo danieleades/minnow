@@ -27,10 +27,47 @@ pub use parse_struct::Field;
 const MAX_DENOMINATOR: u128 = (1 << (64 - 2)) - 1;
 
 #[derive(FromDeriveInput)]
+#[darling(attributes(encode), and_then = Self::validate_unbounded)]
 pub struct Receiver {
     pub ident: syn::Ident,
     pub generics: syn::Generics,
     pub data: ast::Data<Variant, Field>,
+    /// Container-level `#[encode(unbounded)]`: suppress the generated
+    /// [`Bounded`] impl for a schema with no finite worst-case size (e.g. one
+    /// containing a hand-written unbounded field type). The codec impl is
+    /// still generated; the schema simply has no size report and no
+    /// length-validated decode.
+    #[darling(default)]
+    pub unbounded: darling::util::Flag,
+}
+
+impl Receiver {
+    /// An `#[encode(unbounded)]` *enum* must weight every variant explicitly:
+    /// the automatic discriminant weighting is each variant's payload
+    /// cardinality, which is exactly what an unbounded schema does not have.
+    fn validate_unbounded(self) -> darling::Result<Self> {
+        if self.unbounded.is_present() {
+            if let ast::Data::Enum(variants) = &self.data {
+                let errors: Vec<Error> = variants
+                    .iter()
+                    .filter(|variant| variant.weight.is_none())
+                    .map(|variant| {
+                        Error::custom(
+                            "an `#[encode(unbounded)]` enum requires an explicit \
+                             `#[encode(weight = N)]` on every variant: automatic discriminant \
+                             weighting uses payload cardinalities, which an unbounded schema \
+                             does not have",
+                        )
+                        .with_span(&variant.ident)
+                    })
+                    .collect();
+                if !errors.is_empty() {
+                    return Err(Error::multiple(errors));
+                }
+            }
+        }
+        Ok(self)
+    }
 }
 
 /// A signed number parsed from attribute meta.
@@ -106,7 +143,7 @@ pub enum Model {
     /// any expression, so it **cannot** be validated at macro-expansion time.
     /// An invalid or mistyped expression surfaces as an ordinary compile
     /// error at its interpolation site (e.g. a type mismatch against
-    /// `<FieldType as EncodeableCustom>::Config`) rather than a clean
+    /// `<FieldType as Encodeable>::Config`) rather than a clean
     /// macro-time diagnostic.
     Config(syn::Expr),
 }

@@ -3,7 +3,7 @@
 //! sugar) collected into a bounded `Vec`. This is the shape Phase 5's DCCL
 //! comparison example builds on (a fleet of reports in one message).
 
-use minnow::Encodeable;
+use minnow::{Bounded, Encodeable};
 
 #[derive(Debug, Encodeable, PartialEq, Clone, Copy)]
 pub enum VehicleClass {
@@ -69,11 +69,11 @@ fn size_matches_length_prefix_plus_reports() {
     // uniform length prefix over 0..=10 (log2(11) bits), plus coder
     // termination — matching `SeqModel`'s documented
     // `worst_case_bits = log2(L+1) + L * worst_case_bits(elem)` formula.
-    let report_bits = <NavigationReport as Encodeable>::worst_case_bits();
+    let report_bits = <NavigationReport as Bounded>::worst_case_bits(&());
     let length_bits = 11_f64.log2();
     let expected_worst = length_bits + 10.0 * report_bits;
 
-    let worst = <Fleet as Encodeable>::worst_case_bits();
+    let worst = <Fleet as Bounded>::worst_case_bits(&());
     assert!(
         (worst - expected_worst).abs() < 1e-6,
         "expected {expected_worst}, got {worst}"
@@ -95,7 +95,7 @@ fn beats_dccl_per_report_bit_budget() {
     // already beats that per-report; this is the nested-`Vec` analogue of
     // that comparison, checked directly against `NavigationReport`'s own
     // measured worst-case bits.
-    let report_bits = <NavigationReport as Encodeable>::worst_case_bits();
+    let report_bits = <NavigationReport as Bounded>::worst_case_bits(&());
     assert!(
         report_bits < 53.0,
         "expected < 53 bits/report, got {report_bits}"

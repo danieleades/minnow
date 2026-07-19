@@ -1,7 +1,7 @@
 //! Round-trip and size-law tests for `Vec<T>` (issue #5), both hand-configured
 //! (`SeqModel`) and via the `#[encode(seq(...))]` derive sugar.
 
-use minnow::{Encodeable, EncodeableCustom, FloatModel, SeqModel};
+use minnow::{Bounded, Encodeable, FloatModel, SeqModel};
 
 #[derive(Debug, Encodeable, PartialEq, Clone, Copy)]
 pub enum Flag {
@@ -88,7 +88,7 @@ fn per_length_size_law_matches_formula() {
     // equal to it; and it must never exceed that figure, which is a genuine
     // upper bound (`SizeReport::total_bytes`'s contract).
     let elem = FloatModel::new(0.0..=10.0, 1).unwrap();
-    let elem_bits = <f64 as EncodeableCustom>::worst_case_bits(&elem);
+    let elem_bits = <f64 as Bounded>::worst_case_bits(&elem);
     let max_len = 5_u32;
 
     for len in 0..=max_len {
@@ -115,16 +115,14 @@ fn per_length_size_law_matches_formula() {
 #[test]
 fn best_and_worst_case_bits_match_formula() {
     let elem = FloatModel::new(0.0..=10.0, 1).unwrap();
-    let elem_bits = <f64 as EncodeableCustom>::worst_case_bits(&elem);
+    let elem_bits = <f64 as Bounded>::worst_case_bits(&elem);
     let max_len = 5_u32;
     let config = SeqModel { max_len, elem };
 
     let length_bits = (f64::from(max_len) + 1.0).log2();
-    assert!((<Vec<f64> as EncodeableCustom>::best_case_bits(&config) - length_bits).abs() < 1e-9);
+    assert!((<Vec<f64> as Bounded>::best_case_bits(&config) - length_bits).abs() < 1e-9);
     let expected_worst = length_bits + f64::from(max_len) * elem_bits;
-    assert!(
-        (<Vec<f64> as EncodeableCustom>::worst_case_bits(&config) - expected_worst).abs() < 1e-9
-    );
+    assert!((<Vec<f64> as Bounded>::worst_case_bits(&config) - expected_worst).abs() < 1e-9);
 }
 
 // --- Weight formula ----------------------------------------------------------
@@ -138,7 +136,7 @@ fn weight_matches_geometric_sum_formula() {
         elem: (),
     };
     assert_eq!(
-        <Vec<Flag> as EncodeableCustom>::weight(&config).get(),
+        <Vec<Flag> as Bounded>::weight(&config).get(),
         1 + 3 + 9 + 27
     );
 }
