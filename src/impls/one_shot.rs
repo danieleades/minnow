@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{convert::Infallible, ops::Range};
 
 use arithmetic_coding::one_shot;
 
@@ -6,16 +6,21 @@ use arithmetic_coding::one_shot;
 /// possible symbols.
 ///
 /// This model has a constant value `N` representing the total number of
-/// possible symbols.
+/// possible symbols. The distribution is uniform, so each symbol costs exactly
+/// `log2(N)` bits (fractionally).
 #[derive(Default, Debug)]
 pub struct OneShot<const N: u32>;
 
 impl<const N: u32> one_shot::Model for OneShot<N> {
     type B = u128;
     type Symbol = u32;
-    type ValueError = !;
+    type ValueError = Infallible;
 
     fn probability(&self, symbol: &Self::Symbol) -> Result<Range<Self::B>, Self::ValueError> {
+        debug_assert!(
+            *symbol < N,
+            "symbol {symbol} is out of range for a OneShot model over {N} symbols",
+        );
         Ok((*symbol).into()..(symbol + 1).into())
     }
 

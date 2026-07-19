@@ -1,6 +1,6 @@
 use darling::{FromField, FromVariant};
 
-use super::{parse_attributes, Model};
+use super::{Model, parse_attributes};
 
 #[derive(FromField)]
 pub struct Field {
@@ -76,7 +76,7 @@ mod tests {
         ; "tuple enum w model"
     )]
     fn parse(tokens: TokenStream) {
-        let parsed = syn::parse_str(&tokens.to_string()).unwrap();
+        let parsed: syn::DeriveInput = syn::parse2(tokens).unwrap();
         let _receiver = Receiver::from_derive_input(&parsed).unwrap();
     }
 }

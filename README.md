@@ -35,10 +35,13 @@ let input = NavigationReport {
 };
 
 let compressed = input.encode_bytes();
-let output = NavigationReport::decode_bytes(&compressed);
+let output = NavigationReport::decode_bytes(&compressed).unwrap();
 
 assert_eq!(input, output);
 ```
+
+Minnow builds on **stable** Rust. Decoding operates on untrusted input, so
+`decode_bytes` returns a `Result<_, minnow::DecodeError>` and never panics.
 
 Minnow was originally conceived as a library for creating compact messages for underwater acoustic communications. It is heavily inspired by [Dynamic Compact Control Language (DCCL)](https://libdccl.org/3.0/)
 

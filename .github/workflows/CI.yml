@@ -7,71 +7,57 @@ name: Continuous integration
 
 jobs:
   test:
-    name: test
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        #build: [msrv, stable, beta, nightly, macos, windows]
-        build: [nightly]
+        os: [ubuntu-latest]
+        rust: [stable, nightly]
         include:
-          # - build: msrv
-          #   os: ubuntu-latest
-          #   rust: 1.56
-          # - build: stable
-          #   os: ubuntu-latest
-          #   rust: stable
-          # - build: beta
-          #   os: ubuntu-latest
-          #   rust: beta
-          - build: nightly
-            os: ubuntu-latest
-            rust: nightly
-          # - build: macos
-          #   os: macos-latest
-          #   rust: stable
-          # - build: windows
-          #   os: windows-latest
-          #   rust: stable
+          - os: macos-latest
+            rust: stable
+          - os: windows-latest
+            rust: stable
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust }}
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all-features --workspace
+      - run: cargo test --workspace --all-features --all-targets
+      - run: cargo test --workspace --all-features --doc
 
-  fmt:
-    name: format
+  msrv:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-          profile: minimal
-          components: rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-hack
+      # Check each crate against its declared rust-version, without
+      # dev-dependencies (whose MSRVs don't constrain downstream users).
+      - run: cargo hack check --rust-version --no-dev-deps --workspace
 
   clippy:
-    name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: nightly
-          override: true
-          profile: minimal
           components: clippy
-      - uses: actions-rs/clippy-check@v1
+      - run: cargo clippy --workspace --all-targets --all-features
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features --all-targets --workspace
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  doc:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo doc --workspace --no-deps --all-features
