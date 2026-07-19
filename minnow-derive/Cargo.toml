@@ -7,13 +7,13 @@ license = "GPL-3.0"
 repository = "https://github.com/danieleades/minnow"
 keywords = ["compression", "encoding", "arithmetic-coding", "lossless"]
 categories = ["compression", "encoding", "parsing"]
-rust-version = "1.85"
+rust-version = "1.88"
 
 [lib]
 proc-macro = true
 
 [dependencies]
-darling = "0.20"
+darling = "0.23"
 num-traits = "0.2"
 proc-macro2 = "1.0.37"
 quote = "1.0.17"
