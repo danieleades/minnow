@@ -46,7 +46,7 @@ fn sample_report(seed: u32) -> NavigationReport {
             2 => Some(VehicleClass::Usv),
             _ => Some(VehicleClass::Ship),
         },
-        battery_ok: Some(seed as u32 % 2 == 0),
+        battery_ok: Some((seed as u32).is_multiple_of(2)),
     }
 }
 
