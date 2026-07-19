@@ -2,6 +2,11 @@
 
 #![deny(clippy::all, clippy::cargo)]
 #![warn(clippy::pedantic)]
+// `darling` uses `syn` 2, while the `minnow` and `trybuild` development
+// dependencies currently bring in `syn` 3 through `thiserror` and `serde`.
+// Both versions are upstream implementation details and coexist only in the
+// derive crate's all-targets test graph.
+#![allow(clippy::multiple_crate_versions)]
 
 use darling::{FromDeriveInput, export::syn};
 use proc_macro::TokenStream;
