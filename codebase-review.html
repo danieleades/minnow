@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minnow Codebase and Public API Review</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7f8;
+      --panel: #ffffff;
+      --text: #172126;
+      --muted: #5b6870;
+      --border: #d9e0e4;
+      --accent: #176c78;
+      --accent-soft: #e4f2f3;
+      --high: #b45309;
+      --medium: #806400;
+      --low: #426276;
+      --code: #edf1f3;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #101518;
+        --panel: #182024;
+        --text: #e7edef;
+        --muted: #aab8bf;
+        --border: #344047;
+        --accent: #70c4ce;
+        --accent-soft: #18383d;
+        --high: #ffb45e;
+        --medium: #e7cb65;
+        --low: #9fc3d7;
+        --code: #222c31;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.62 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 40px 0 80px; }
+    header, section, article {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 2px 10px rgb(0 0 0 / 5%);
+    }
+    header { padding: clamp(24px, 5vw, 52px); margin-bottom: 24px; }
+    section { padding: 26px 30px; margin: 24px 0; }
+    article { padding: 26px 30px; margin: 20px 0; scroll-margin-top: 20px; }
+    h1, h2, h3, h4 { line-height: 1.2; }
+    h1 { margin: 0 0 12px; font-size: clamp(2rem, 5vw, 3.45rem); letter-spacing: -0.035em; }
+    h2 { margin: 0 0 18px; font-size: 1.65rem; }
+    h3 { margin: 0; font-size: 1.35rem; }
+    h4 { margin: 24px 0 8px; font-size: 1rem; color: var(--accent); text-transform: uppercase; letter-spacing: .045em; }
+    p { margin: 10px 0; }
+    ul, ol { padding-left: 1.35rem; }
+    li + li { margin-top: 7px; }
+    a { color: var(--accent); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    code { background: var(--code); padding: .12em .32em; border-radius: 4px; }
+    pre { background: var(--code); border: 1px solid var(--border); border-radius: 9px; padding: 16px; overflow: auto; }
+    pre code { padding: 0; background: transparent; }
+    .lede { max-width: 78ch; color: var(--muted); font-size: 1.08rem; }
+    .meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+    .pill, .severity {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .025em;
+    }
+    .toc { columns: 2 320px; }
+    .toc li { break-inside: avoid; margin: 0 0 9px; }
+    .finding-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+    .finding-head h3 { flex: 1; }
+    .severity { flex: none; text-transform: uppercase; }
+    .high { color: var(--high); border-color: currentColor; }
+    .medium { color: var(--medium); border-color: currentColor; }
+    .low { color: var(--low); border-color: currentColor; }
+    .recommendation {
+      border-left: 5px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 7px;
+      padding: 13px 16px;
+      margin-top: 10px;
+    }
+    .evidence { color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+    .mini { border: 1px solid var(--border); border-radius: 9px; padding: 14px 16px; }
+    .mini h3 { font-size: 1rem; color: var(--accent); margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; vertical-align: top; padding: 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--accent); }
+    footer { color: var(--muted); text-align: center; padding-top: 24px; }
+    @media print {
+      :root { color-scheme: light; }
+      body { background: #fff; }
+      main { width: 100%; padding: 0; }
+      header, section, article { box-shadow: none; break-inside: avoid; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Minnow codebase and public API review</h1>
+    <p class="lede">A consumer-focused review of the architecture, implementation quality, complexity, public API, onboarding, documented guarantees, and wire-format behavior of Minnow 0.1.0.</p>
+    <div class="meta">
+      <span class="pill">Review date: 19 July 2026</span>
+      <span class="pill">Scope: full workspace</span>
+      <span class="pill">Status: open findings</span>
+      <span class="pill">Resolved findings removed after verification</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Executive assessment</h2>
+    <p>The core idea is compelling, the source is generally well organized, and the test and CI discipline are unusually good for a 0.1 crate. The arithmetic coder and bit I/O are sensibly delegated to existing libraries, while the domain-specific type weighting and derive implementation are kept readable.</p>
+    <p>The current release is nevertheless not ready for ordinary downstream consumers. Valid float models can panic during valid decoding, and several prominent safety and optimality claims are broader than the implementation supports. These are fixable, but the float-domain bug should be treated as a release blocker.</p>
+  </section>
+
+  <section>
+    <h2>Contents</h2>
+    <ol class="toc">
+      <li><a href="#finding-1">Non-grid-aligned float bounds</a></li>
+      <li><a href="#finding-2">Sequence truncation is accepted</a></li>
+      <li><a href="#finding-3">Weight saturation breaks minimax weighting</a></li>
+      <li><a href="#finding-4">Optional sequences have surprising costs</a></li>
+      <li><a href="#finding-5">Decode resource exhaustion</a></li>
+      <li><a href="#finding-6">Missing compatibility contract</a></li>
+      <li><a href="#finding-7">Marketing and metadata overclaims</a></li>
+      <li><a href="#finding-8">Overexposed low-level API</a></li>
+      <li><a href="#finding-9">Misleading length errors</a></li>
+    </ol>
+  </section>
+
+  <article id="finding-1">
+    <div class="finding-head">
+      <span class="severity high">High</span>
+      <h3>1. Valid, non-grid-aligned float bounds can make valid decoding panic</h3>
+    </div>
+    <p><code>FloatModel::new(0.0..=0.96, 1)</code> is accepted because <code>round((max - min) × 10)</code> produces ten steps. Encoding <code>0.96</code> selects symbol ten; decoding symbol ten produces <code>1.0</code>, outside the declared range. In debug builds, the arithmetic-coding wrapper subsequently reaches Minnow's in-range <code>debug_assert</code> and panics. With that assertion removed, the decoded value remains outside the configured domain.</p>
+    <p class="evidence"><strong>Evidence:</strong> constructor step rounding in <code>src/float.rs:52–87</code>; <code>scale</code>/<code>unscale</code> in <code>src/float.rs:146–162</code>. Reproduced with a valid encode/decode round trip.</p>
+
+    <h4>Recommended solution</h4>
+    <div class="recommendation">
+      <p>Define the quantized domain explicitly as an integer index range and guarantee that every index maps inside <code>min..=max</code>. A robust design is:</p>
+      <ol>
+        <li>Compute the step size once and validate that it is finite and nonzero.</li>
+        <li>Use a well-defined endpoint policy—preferably reject bounds that are not aligned to the declared decimal grid, because this keeps the schema honest and makes both endpoints predictable.</li>
+        <li>Store the validated denominator or maximum index in the model rather than recomputing it through floating-point operations.</li>
+        <li>Ensure <code>unscale(i)</code> is within the configured range for every valid <code>i</code>.</li>
+      </ol>
+    </div>
+
+    <h4>Promising alternatives</h4>
+    <ul>
+      <li>Permit unaligned bounds but use <code>floor</code> for the final index and document that the effective maximum is the last grid point at or below <code>max</code>. Encoding must then reject or deliberately project values above that effective maximum.</li>
+      <li>Keep rounding but clamp the decoded endpoint back to <code>max</code>. This avoids the panic, but creates a nonuniform final bucket and invalidates the simple uniform-cardinality model unless its probability width is adjusted.</li>
+      <li>Represent decimal bounds and precision with scaled integers or a decimal crate. This is the most predictable wire model, at the cost of a broader API change.</li>
+    </ul>
+
+    <h4>Acceptance criteria</h4>
+    <ul>
+      <li>Every configuration accepted by <code>FloatModel::new</code> round-trips every valid symbol without panic.</li>
+      <li>Every decoded value is finite and lies inside the advertised inclusive range.</li>
+      <li>Property tests cover unaligned positive and negative bounds, negative precision, narrow ranges, and values within half a step of both endpoints.</li>
+      <li>Macro-time validation and runtime validation share the same implementation or shared specification.</li>
+    </ul>
+  </article>
+
+  <article id="finding-2">
+    <div class="finding-head">
+      <span class="severity high">High</span>
+      <h3>2. Bounded-sequence truncations routinely decode as successful wrong values</h3>
+    </div>
+    <p>The pre-decode length check accepts any byte count between the cheapest and most expensive value. That interval is necessarily broad for <code>Vec</code> and <code>String</code>. The arithmetic decoder then treats exhausted input as zero padding.</p>
+    <p>For <code>Vec&lt;bool&gt;</code> with <code>max_len = 64</code>, a 64-element value encoded to nine bytes. Every truncation from one through eight bytes decoded as <code>Ok</code> with incorrect contents. This contradicts the early README statement that truncated or malformed bytes are always errors, and the method documentation that says the check catches truncation.</p>
+    <p class="evidence"><strong>Evidence:</strong> length-window logic in <code>src/encodeable_custom.rs:137–155</code>; broad sequence best/worst cases in <code>src/seq.rs:144–151</code>; contradictory claims in <code>README.md:51</code> and <code>289–299</code>.</p>
+
+    <h4>Recommended solution</h4>
+    <div class="recommendation">
+      <p>Treat integrity and truncation detection as explicit framing responsibilities. Add a small, first-class framed API that includes payload length and an integrity value:</p>
+      <ul>
+        <li><code>encode_framed</code> writes a schema/version identifier, encoded payload length, payload, and optional CRC or MAC.</li>
+        <li><code>decode_framed</code> verifies the exact payload length and integrity before arithmetic decoding.</li>
+        <li>Keep <code>encode_bytes</code>/<code>decode_bytes</code> as raw expert APIs, but rename or document them prominently as non-validating.</li>
+      </ul>
+      <p>At minimum, remove every unconditional claim that raw decoding detects truncation.</p>
+    </div>
+
+    <h4>Promising alternatives</h4>
+    <ul>
+      <li>Decode, re-encode canonically, and compare the bytes. This may catch truncation without a checksum, but it requires proving canonical uniqueness and adds full re-encoding cost.</li>
+      <li>Expose an API that accepts an independently trusted exact bit or byte length from the transport. This fits protocols that already provide framing.</li>
+      <li>Add an end-of-message sentinel model. It can improve truncation detection, but without an integrity code some corrupt streams will still decode to a valid sentinel.</li>
+    </ul>
+
+    <h4>Acceptance criteria</h4>
+    <ul>
+      <li>Documentation distinguishes raw arithmetic decoding from integrity-checked framing before the quick start.</li>
+      <li>Tests truncate every byte of fixed and variable-length values and assert behavior promised by the selected API.</li>
+      <li>If a framed API is added, every proper truncation fails deterministically.</li>
+    </ul>
+  </article>
+
+  <article id="finding-3">
+    <div class="finding-head">
+      <span class="severity high">High</span>
+      <h3>3. Saturating <code>u128</code> weights invalidate automatic minimax weighting</h3>
+    </div>
+    <p>Payload cardinalities saturate beyond roughly sixteen bytes. Derived enums then pass the saturated sentinel through <code>.get()</code> as a real discriminant weight, destroying relative cardinality. For an enum containing <code>[u8; 16]</code> and <code>[u8; 32]</code> variants, both weights saturate identically, so each gets a one-bit discriminant. The observed variants encoded to 17 and 33 bytes rather than equal lengths.</p>
+    <p class="evidence"><strong>Evidence:</strong> saturation documented in <code>src/weight.rs:34–43</code>; saturated values used in generated discriminants at <code>minnow-derive/src/write.rs:383–389</code>; headline equality claim at <code>README.md:97–107</code>.</p>
+
+    <h4>Recommended solution</h4>
+    <div class="recommendation">
+      <p>Use exact arbitrary-precision cardinalities for schema construction, then rescale them once when building the bounded arithmetic model. <code>num-bigint::BigUint</code> is the straightforward solved solution: products and sums remain exact, relative interval widths can be calculated correctly, and the final widths can still be normalized into <code>MAX_DENOMINATOR</code>.</p>
+      <p>Keep bit-size accumulation in log space for reporting, but do not use a saturated sentinel as a probability weight.</p>
+    </div>
+
+    <h4>Promising alternatives</h4>
+    <ul>
+      <li>Store a hybrid weight: exact <code>u128</code> while small, plus logarithm and normalized mantissa after overflow. This avoids a big-integer dependency but is substantially harder to make exact and test.</li>
+      <li>Build discriminant weights directly from worst-case bit costs using log-sum-exp normalization. This preserves minimax ratios approximately and scales well, but the README must stop describing them as exact cardinalities.</li>
+      <li>Reject automatically weighted enums once any payload weight saturates and require explicit manual weights. This is honest and easy, but poor ergonomics for ordinary messages over sixteen bytes.</li>
+    </ul>
+
+    <h4>Acceptance criteria</h4>
+    <ul>
+      <li>Automatic weighting preserves meaningful ratios for payloads above 128 bits.</li>
+      <li>An enum containing 16-byte and 32-byte uniform payloads has equal worst-case total costs within the documented rescaling tolerance.</li>
+      <li>No saturated sentinel is silently interpreted as an exact cardinality.</li>
+    </ul>
+  </article>
+
+  <article id="finding-4">
+    <div class="finding-head">
+      <span class="severity high">High</span>
+      <h3>4. Automatic <code>Option&lt;Vec&lt;T&gt;&gt;</code> weighting defeats the stated sequence policy</h3>
+    </div>
+    <p>Sequences deliberately use a uniform length prefix so short values remain cheap. An enclosing <code>Option</code>, however, weights <code>Some</code> using the vector's full cardinality, which is dominated by the maximum length. Consequently, <code>None</code> becomes almost as expensive as the maximum payload.</p>
+    <p>For <code>Option&lt;Vec&lt;bool&gt;&gt;</code> with <code>max_len = 64</code>, observed sizes were eight bytes for <code>None</code>, one byte for <code>Some([])</code>, and nine bytes for a full vector. There is no override for <code>Option</code>'s automatic weighting.</p>
+    <p class="evidence"><strong>Evidence:</strong> fixed <code>{None: 1, Some: W(T)}</code> policy in <code>src/impls.rs:12–23</code>; vector cardinality in <code>src/seq.rs:113–141</code>.</p>
+
+    <h4>Recommended solution</h4>
+    <div class="recommendation">
+      <p>Make sum-type discriminant policy explicit and compositional. Introduce a configuration wrapper such as <code>OptionModel&lt;C&gt;</code> with selectable policies:</p>
+      <ul>
+        <li><strong>Uniform:</strong> cheap and unsurprising presence bit; best default for optional variable-length data.</li>
+        <li><strong>Cardinality weighted:</strong> current minimax behavior for uniform fixed-size payloads.</li>
+        <li><strong>Prior weighted:</strong> caller-supplied expected-frequency weights.</li>
+      </ul>
+      <p>The derive can select cardinality weighting automatically only when the payload reports uniform per-value cost; otherwise it should default to uniform or require an explicit choice.</p>
+    </div>
+
+    <h4>Promising alternatives</h4>
+    <ul>
+      <li>Always use a uniform discriminant for <code>Option</code>. This is simple and unsurprising but gives up the demonstrated two-bit optimal encoding for <code>Option&lt;VehicleClass&gt;</code>.</li>
+      <li>Add only a manual override attribute for option fields, such as <code>#[encode(option(none_weight = 1, some_weight = 1), ...)]</code>. Smaller change, but automatic behavior remains context-sensitive.</li>
+      <li>Weight variants using their encoded-cost distribution instead of cardinality. This is more principled but needs a richer model than the current scalar <code>Weight</code>.</li>
+    </ul>
+
+    <h4>Acceptance criteria</h4>
+    <ul>
+      <li>Consumers can make <code>None</code> cheap without replacing <code>Option</code> with a custom enum.</li>
+      <li>The chosen default for variable-length payloads is documented with byte-level examples.</li>
+      <li>Size reports expose the <code>None</code>/<code>Some</code> breakdown instead of presenting <code>Option</code> as an opaque leaf.</li>
+    </ul>
+  </article>
+
+  <article id="finding-5">
+    <div class="finding-head">
+      <span class="severity medium">Medium</span>
+      <h3>5. Untrusted decoding can consume attacker-selected memory and CPU up to <code>max_len</code></h3>
+    </div>
+    <p>A decoded sequence length is passed directly to <code>Vec::with_capacity</code>, followed by a loop of that length. <code>SeqModel</code> permits <code>u32::MAX</code>, and <code>StringModel</code> accepts that bound. A short malicious stream can therefore request billions of elements or iterations when an application uses a permissive schema.</p>
+    <p class="evidence"><strong>Evidence:</strong> public unrestricted <code>SeqModel</code> fields at <code>src/seq.rs:98–104</code>; allocation at <code>src/seq.rs:225–228</code>; <code>StringModel::new</code> accepts every length fitting in <code>u32</code>.</p>
+
+    <h4>Recommended solution</h4>
+    <div class="recommendation">
+      <p>Add an explicit decode budget independent of the schema:</p>
+      <ul>
+        <li>Maximum elements, maximum allocation bytes, and optionally maximum nesting/work.</li>
+        <li>Use <code>try_reserve</code> and return a typed <code>DecodeError::ResourceLimit</code> or <code>Allocation</code>.</li>
+        <li>Treat <code>max_len</code> as a wire-domain limit and the decode budget as an operational security limit.</li>
+      </ul>
+    </div>
+
+    <h4>Promising alternatives</h4>
+    <ul>
+      <li>Impose a conservative library-wide maximum. Easy, but arbitrary and inappropriate for some users.</li>
+      <li>Provide iterator/streaming decoding so callers need not materialize the entire sequence. Best for large data, but a much broader API.</li>
+      <li>Document that callers must choose safe <code>max_len</code> values. Necessary regardless, but insufficient for reusable schemas in different environments.</li>
+    </ul>
+
+    <h4>Acceptance criteria</h4>
+    <ul>
+      <li>No decoded length can cause an infallible large allocation.</li>
+      <li>Nested sequences are constrained by a total budget, not only independent per-field maxima.</li>
+      <li>Security documentation identifies sequence bounds as part of the trust boundary.</li>
+    </ul>
+  </article>
+
+  <article id="finding-6">
+    <div class="finding-head">
+      <span class="severity medium">Medium</span>
+      <h3>6. Consumers are given no wire compatibility or schema-evolution contract</h3>
+    </div>
+    <p>The format is schema-dependent and non-self-describing. Reordering fields, changing bounds or precision, reordering enum variants, adding a variant, changing weights, or changing a config expression changes the interpretation of bytes. Because correct-length wrong-schema data can decode successfully, this is also an integrity concern.</p>
+
+    <h4>Recommended solution</h4>
+    <div class="recommendation">
+      <p>Publish a dedicated wire compatibility section that states:</p>
+      <ul>
+        <li>Whether wire compatibility is promised across Minnow versions.</li>
+        <li>Which Rust/schema changes are wire-breaking.</li>
+        <li>That both peers must use identical model configuration and variant/field order.</li>
+        <li>How applications should carry schema and protocol version identifiers.</li>
+      </ul>
+      <p>Add an optional deterministic schema fingerprint derived from type shape, model parameters, ordering, and codec version. Include it in the recommended framed format.</p>
+    </div>
+
+    <h4>Promising alternatives</h4>
+    <ul>
+      <li>Explicitly declare all 0.x wire formats unstable and require application-owned versioning. This is acceptable for 0.1 if stated prominently.</li>
+      <li>Generate a schema descriptor that consumers can persist or negotiate. More discoverable than an opaque fingerprint and useful for tooling.</li>
+      <li>Adopt stable numeric tags for fields and variants. This enables some evolution patterns but costs bits and changes Minnow's core format.</li>
+    </ul>
+
+    <h4>Acceptance criteria</h4>
+    <ul>
+      <li>A consumer can determine whether a source-code schema edit is wire-compatible without reading macro internals.</li>
+      <li>The recommended onboarding example includes a schema/version framing strategy.</li>
+      <li>Golden byte fixtures detect accidental wire changes in releases that claim stability.</li>
+    </ul>
+  </article>
+
+  <article id="finding-7">
+    <div class="finding-head">
+      <span class="severity medium">Medium</span>
+      <h3>7. Marketing and package metadata overstate the demonstrated benefits</h3>
+    </div>
+    <p>The package advertises the keyword <code>lossless</code>, but floating-point fields are explicitly quantized lossily. The README says Minnow “reliably beats DCCL” for its target schemas, while the repository contains one formula-based comparison for one schema rather than a measurement against <code>libdccl</code>. A single report occupies seven whole bytes in both schemes despite Minnow's lower fractional bit count.</p>
+    <p>The README also begins with a strong guarantee that corrupt and truncated input is always rejected, then correctly concedes later that plausible corrupt input can decode successfully.</p>
+
+    <h4>Recommended solution</h4>
+    <div class="recommendation">
+      <ul>
+        <li>Replace <code>lossless</code> with a term such as <code>quantization</code>, <code>telemetry</code>, or <code>compact-binary</code>.</li>
+        <li>Describe float support as schema-declared lossy quantization in the opening section, not only deep in the README.</li>
+        <li>State the DCCL result narrowly: “In the included navigation schema, the documented DCCL formula gives 68 bytes for ten reports versus 65 measured Minnow bytes.”</li>
+        <li>Move the raw-format integrity warning adjacent to the first encode/decode example.</li>
+      </ul>
+    </div>
+
+    <h4>Promising alternatives</h4>
+    <ul>
+      <li>Reserve “lossless” only for integer/string/enum schemas and qualify it explicitly. Package-level keywords cannot express that nuance well, so removal is preferable.</li>
+      <li>Add real cross-library benchmarks over several DCCL-style schemas. This could justify broader language later.</li>
+    </ul>
+
+    <h4>Acceptance criteria</h4>
+    <ul>
+      <li>No introductory claim conflicts with a later limitations section.</li>
+      <li>Every comparative performance claim names the measured or calculated scenario.</li>
+      <li>Package metadata accurately describes lossy float support.</li>
+    </ul>
+  </article>
+
+  <article id="finding-8">
+    <div class="finding-head">
+      <span class="severity medium">Medium/low</span>
+      <h3>8. The stable public surface exposes more codec machinery than most consumers need</h3>
+    </div>
+    <p><code>EncodeVisitor</code>, <code>DecodeVisitor</code>, <code>OneShot</code>, <code>WeightedModel</code>, precision constants, and bitstream bounds form a second low-level API alongside derive-based encoding. It contains easy foot-guns such as <code>OneShot&lt;0&gt;</code>, out-of-range symbols guarded only by debug assertions, and calling <code>flush</code> twice even though the documentation says consumed-state panics cannot happen through the public API.</p>
+    <p>The derive crate is also unconditional, so users who only want manual models still compile the full procedural macro and <code>darling</code> dependency stack.</p>
+
+    <h4>Recommended solution</h4>
+    <div class="recommendation">
+      <p>Define two deliberate API tiers:</p>
+      <ol>
+        <li>A small default surface containing the derive, high-level encode/decode methods, built-in model constructors, errors, and reports.</li>
+        <li>An <code>advanced</code> module or feature containing visitors and raw arithmetic models, with explicit invariants and fallible constructors.</li>
+      </ol>
+      <p>Make the derive an enabled-by-default Cargo feature so minimal/manual users can opt out.</p>
+    </div>
+
+    <h4>Promising alternatives</h4>
+    <ul>
+      <li>Keep the exports but mark the low-level API as unstable and exempt from semver guarantees during 0.x.</li>
+      <li>Replace <code>OneShot&lt;N&gt;</code> with a constructor-validated runtime model. This loses const-generic convenience but prevents <code>N = 0</code>.</li>
+      <li>Make visitor state transitions return typed errors rather than panic. This is useful even if the types remain advanced/public.</li>
+    </ul>
+
+    <h4>Acceptance criteria</h4>
+    <ul>
+      <li>The primary rustdoc landing page presents only the common consumer journey first.</li>
+      <li>Safe public APIs do not panic on invalid call order or invalid model parameters.</li>
+      <li><code>default-features = false</code> can avoid compiling the derive stack if the feature split is adopted.</li>
+    </ul>
+  </article>
+
+  <article id="finding-9">
+    <div class="finding-head">
+      <span class="severity low">Low</span>
+      <h3>9. <code>DecodeError::Length</code> gives misleading information for short input</h3>
+    </div>
+    <p>The variant stores only a maximum and formats every mismatch as “schema requires at most N.” For an empty or too-short input, that message describes a condition the input already satisfies and omits the actual minimum.</p>
+    <p class="evidence"><strong>Evidence:</strong> <code>src/error.rs:26–49</code>; the implementation computes a lower bound but discards it at <code>src/encodeable_custom.rs:144–149</code>.</p>
+
+    <h4>Recommended solution</h4>
+    <div class="recommendation">
+      <p>Change the variant to <code>Length { min, max, actual }</code> and render either an exact requirement or a range. For example: “input is 0 bytes; this schema accepts 6..=7 bytes.”</p>
+    </div>
+
+    <h4>Promising alternatives</h4>
+    <ul>
+      <li>Split it into <code>TooShort</code> and <code>TooLong</code>. This is convenient for matching but expands a non-exhaustive public enum.</li>
+      <li>Store a <code>RangeInclusive&lt;usize&gt;</code>. Compact, though named fields are somewhat clearer in diagnostics and serialization.</li>
+    </ul>
+
+    <h4>Acceptance criteria</h4>
+    <ul>
+      <li>Error text accurately explains both undersized and oversized input.</li>
+      <li>Callers can inspect the complete accepted length range.</li>
+    </ul>
+  </article>
+
+  <section>
+    <h2>Architecture and code-quality assessment</h2>
+    <div class="grid">
+      <div class="mini">
+        <h3>Strong delegation</h3>
+        <p>Arithmetic coding and bit-level I/O use established crates rather than hand-rolled implementations.</p>
+      </div>
+      <div class="mini">
+        <h3>Clear source layout</h3>
+        <p>Leaf models, sequence/string handling, errors, reporting, visitors, and weighting each have focused modules.</p>
+      </div>
+      <div class="mini">
+        <h3>Good derive structure</h3>
+        <p>The parse/process/write pipeline is coherent, and shared product-field generation prevents struct/variant drift.</p>
+      </div>
+      <div class="mini">
+        <h3>Appropriate error separation</h3>
+        <p>Encoding, decoding, and invalid model construction have distinct types with useful non-exhaustive variants.</p>
+      </div>
+      <div class="mini">
+        <h3>Strong baseline hygiene</h3>
+        <p><code>unsafe</code> is forbidden, documentation is linted, and the source is readable despite extensive mathematical commentary.</p>
+      </div>
+      <div class="mini">
+        <h3>Useful reporting</h3>
+        <p>The size-report tree is a valuable consumer feature and generally provides a conservative byte upper bound.</p>
+      </div>
+    </div>
+
+    <h4>Complexity worth reducing</h4>
+    <ul>
+      <li><strong>Duplicated model validation:</strong> float/integer validation is manually mirrored in the runtime and proc-macro crates. A small shared non-proc-macro core crate or shared model specification would reduce drift.</li>
+      <li><strong>Saturating cardinality algebra:</strong> the hand-rolled <code>Weight</code> representation is elegant for reports but unsuitable as an exact probability source once overflow occurs. Use a solved exact or log-domain representation.</li>
+      <li><strong>Repeated theoretical claims:</strong> the same semiring/minimax explanation appears across README and several modules. Keep one authoritative explanation and let API docs focus on contracts, edge cases, and examples.</li>
+      <li><strong>Configuration ownership:</strong> <code>EncodeableCustom</code> consumes configs by value, forcing <code>Clone</code> throughout arrays and sequences. Borrowed configuration would be cheaper and would support non-clone custom models.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Testing and delivery assessment</h2>
+    <p>The suite covers structs, tuple/struct/unit variants, arrays, generics, custom models, compile failures, malformed input, sequence limits, and size laws. CI covers stable and nightly Rust, Linux/macOS/Windows, MSRV, formatting, rustdoc, linting, and coverage.</p>
+    <p>The main blind spots are environmental and property-based:</p>
+    <ul>
+      <li>Adversarial sequence tests assert only that decoding does not panic; they do not assert that truncation returns <code>Err</code>.</li>
+      <li>Float tests use grid-aligned endpoints and therefore miss the valid-model panic.</li>
+      <li>Size-law fixtures stay below or do not compare across cardinality saturation in unequal enum variants.</li>
+      <li>Deterministic random-input loops are useful smoke tests but are not a substitute for property tests and persistent fuzz corpora.</li>
+    </ul>
+
+    <h4>Recommended additions</h4>
+    <ul>
+      <li><code>proptest</code> coverage for model constructor invariants and encode/decode fixed points.</li>
+      <li>A <code>cargo-fuzz</code> target for raw and framed decoding, including nested bounded sequences.</li>
+      <li>Golden wire fixtures once a compatibility policy is selected.</li>
+      <li>Regression tests for every concrete reproduction in this report.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Suggested implementation order</h2>
+    <table>
+      <thead>
+        <tr><th>Order</th><th>Work</th><th>Reason</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Correct float-domain construction and add property tests</td><td>Removes a valid-input panic and domain violation.</td></tr>
+        <tr><td>2</td><td>Correct the README safety claims and define raw versus framed decoding</td><td>Stops consumers relying on guarantees the format cannot provide.</td></tr>
+        <tr><td>3</td><td>Replace saturated probability weights</td><td>Restores the crate's central optimality claim for realistic payload sizes.</td></tr>
+        <tr><td>4</td><td>Introduce configurable sum/option weighting</td><td>Eliminates a major compositional API surprise.</td></tr>
+        <tr><td>5</td><td>Add decode budgets and allocation errors</td><td>Hardens untrusted-input handling.</td></tr>
+        <tr><td>6</td><td>Publish compatibility/framing guidance and schema IDs</td><td>Makes production adoption safer.</td></tr>
+        <tr><td>7</td><td>Tighten metadata, error diagnostics, and advanced API boundaries</td><td>Improves honesty, discoverability, and long-term maintenance.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Verification performed</h2>
+    <ul>
+      <li><code>cargo test --workspace --all-targets --offline</code> — passed</li>
+      <li><code>cargo test --workspace --doc --offline</code> — passed</li>
+      <li><code>cargo clippy --workspace --all-targets --offline -- -D warnings</code> — passed</li>
+      <li><code>cargo package --list --offline</code> — passed</li>
+      <li>Workspace tests include isolated direct and renamed downstream clients with no direct <code>bitstream-io</code> dependency.</li>
+      <li>Truncation, float-endpoint, saturated-weight, and optional-sequence probes were performed.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Minnow 0.1.0 codebase review · Generated as a self-contained HTML document
+  </footer>
+</main>
+</body>
+</html>

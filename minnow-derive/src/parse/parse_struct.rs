@@ -12,8 +12,8 @@ pub struct Field {
 }
 
 impl Field {
-    pub fn model(&self) -> TokenStream {
-        Model::config_tokens(self.model.as_ref())
+    pub fn model(&self, minnow: &TokenStream) -> TokenStream {
+        Model::config_tokens(self.model.as_ref(), minnow)
     }
 }
 
