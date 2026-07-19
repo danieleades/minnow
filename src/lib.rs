@@ -19,15 +19,19 @@ mod encodeable_custom;
 mod error;
 mod float;
 mod impls;
+mod report;
 mod visitor;
+mod weight;
 
 pub use encodeable::Encodeable;
 pub use encodeable_custom::EncodeableCustom;
 pub use error::DecodeError;
 pub use float::{FloatModel, ModelError};
-pub use impls::one_shot::OneShot;
+pub use impls::{one_shot::OneShot, weighted::WeightedModel};
 pub use minnow_derive::Encodeable;
+pub use report::{SizeReport, TERMINATION_BITS};
 pub use visitor::{DecodeVisitor, EncodeVisitor};
+pub use weight::Weight;
 
 /// The precision (in bits) of the arithmetic coder used throughout this crate.
 ///

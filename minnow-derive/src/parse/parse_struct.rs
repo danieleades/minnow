@@ -1,6 +1,5 @@
 use darling::FromField;
 use proc_macro2::TokenStream;
-use quote::quote;
 
 use super::{Model, parse_attributes};
 
@@ -12,20 +11,7 @@ pub struct Field {
 
 impl Field {
     pub fn model(&self) -> TokenStream {
-        match self.model {
-            Some(Model::Float {
-                min: crate::parse::Number(min),
-                max: crate::parse::Number(max),
-                precision: crate::parse::Number(precision),
-            }) => quote! {
-                minnow::FloatModel::new( #min ..= #max, #precision )
-                    .expect("model bounds validated at compile time")
-            },
-            Some(Model::String { max_length }) => {
-                quote! { minnow::StringModel::new( #max_length ) }
-            }
-            None => quote! {()},
-        }
+        Model::config_tokens(self.model.as_ref())
     }
 }
 

@@ -20,5 +20,4 @@ num-traits = "0.2.14"
 thiserror = "2"
 
 [dev-dependencies]
-bitstream-io = "2"
 test-case = "3.0.0"

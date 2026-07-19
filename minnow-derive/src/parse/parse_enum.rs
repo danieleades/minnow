@@ -1,6 +1,6 @@
 use darling::{FromField, FromVariant};
 
-use super::{Model, parse_attributes};
+use super::{Model, parse_variant_attributes};
 
 #[derive(FromField)]
 pub struct Field {
@@ -10,6 +10,7 @@ pub struct Field {
 pub struct Variant {
     pub ident: syn::Ident,
     pub options: Option<Model>,
+    pub weight: Option<u128>,
     pub fields: darling::ast::Fields<Field>,
 }
 
@@ -17,15 +18,18 @@ impl FromVariant for Variant {
     fn from_variant(variant: &syn::Variant) -> darling::Result<Self> {
         let mut errors = darling::Error::accumulator();
 
-        let options = errors.handle(parse_attributes(&variant.attrs));
+        let attributes = errors.handle(parse_variant_attributes(&variant.attrs));
         let fields = errors.handle(darling::ast::Fields::try_from(&variant.fields));
 
         errors.finish()?;
 
+        let (options, weight) = attributes.unwrap();
+
         Ok(Self {
             ident: variant.ident.clone(),
             fields: fields.unwrap(),
-            options: options.unwrap(),
+            options,
+            weight,
         })
     }
 }
