@@ -21,10 +21,10 @@ use crate::{
     process::{Data, EnumData, EnumVariant, StructData, StructStyle},
 };
 
-pub fn write(receiver: Data) -> TokenStream {
+pub fn write(receiver: Data, minnow: &TokenStream) -> TokenStream {
     match receiver {
-        Data::Struct(struct_data) => write_struct(struct_data),
-        Data::Enum(enum_data) => write_enum(enum_data),
+        Data::Struct(struct_data) => write_struct(struct_data, minnow),
+        Data::Enum(enum_data) => write_enum(enum_data, minnow),
     }
 }
 
@@ -62,7 +62,7 @@ struct FieldSpec {
 }
 
 impl FieldSpec {
-    fn new(index: usize, field: &parse::Field) -> Self {
+    fn new(index: usize, field: &parse::Field, minnow: &TokenStream) -> Self {
         let name = field
             .ident
             .as_ref()
@@ -74,7 +74,7 @@ impl FieldSpec {
 
         Self {
             ty: field.ty.clone(),
-            model: field.model(),
+            model: field.model(minnow),
             has_explicit_model: field.model.is_some(),
             name,
             binding,
@@ -84,14 +84,14 @@ impl FieldSpec {
 
 /// Lower a [`StructStyle`] (a struct's fields, or an enum variant's payload)
 /// to its uniform [`Shape`] and [`FieldSpec`] list.
-fn product_fields(style: &StructStyle) -> (Shape, Vec<FieldSpec>) {
+fn product_fields(style: &StructStyle, minnow: &TokenStream) -> (Shape, Vec<FieldSpec>) {
     match style {
         StructStyle::Tuple(fields) => (
             Shape::Positional,
             fields
                 .iter()
                 .enumerate()
-                .map(|(i, f)| FieldSpec::new(i, f))
+                .map(|(i, f)| FieldSpec::new(i, f, minnow))
                 .collect(),
         ),
         StructStyle::Struct(fields) => (
@@ -99,7 +99,7 @@ fn product_fields(style: &StructStyle) -> (Shape, Vec<FieldSpec>) {
             fields
                 .iter()
                 .enumerate()
-                .map(|(i, f)| FieldSpec::new(i, f))
+                .map(|(i, f)| FieldSpec::new(i, f, minnow))
                 .collect(),
         ),
         StructStyle::Unit => (Shape::Unit, Vec::new()),
@@ -120,26 +120,26 @@ struct ProductMetrics {
     report: TokenStream,
 }
 
-fn product_metrics(fields: &[FieldSpec]) -> ProductMetrics {
+fn product_metrics(fields: &[FieldSpec], minnow: &TokenStream) -> ProductMetrics {
     let weight_terms = fields.iter().map(|f| {
         let ty = &f.ty;
         let model = &f.model;
         quote_spanned! {ty.span()=>
-            * <#ty as minnow::EncodeableCustom>::weight(&(#model))
+            * <#ty as #minnow::EncodeableCustom>::weight(&(#model))
         }
     });
     let bits_terms = fields.iter().map(|f| {
         let ty = &f.ty;
         let model = &f.model;
         quote_spanned! {ty.span()=>
-            + <#ty as minnow::EncodeableCustom>::worst_case_bits(&(#model))
+            + <#ty as #minnow::EncodeableCustom>::worst_case_bits(&(#model))
         }
     });
     let best_bits_terms = fields.iter().map(|f| {
         let ty = &f.ty;
         let model = &f.model;
         quote_spanned! {ty.span()=>
-            + <#ty as minnow::EncodeableCustom>::best_case_bits(&(#model))
+            + <#ty as #minnow::EncodeableCustom>::best_case_bits(&(#model))
         }
     });
     let report_children = fields.iter().map(|f| {
@@ -147,16 +147,16 @@ fn product_metrics(fields: &[FieldSpec]) -> ProductMetrics {
         let model = &f.model;
         let name = &f.name;
         quote_spanned! {ty.span()=>
-            <#ty as minnow::EncodeableCustom>::report(&(#model)).with_name(#name)
+            <#ty as #minnow::EncodeableCustom>::report(&(#model)).with_name(#name)
         }
     });
 
     ProductMetrics {
         // Product rule: the type's cardinality is the product of its fields'.
-        weight: quote! { minnow::Weight::ONE #( #weight_terms )* },
+        weight: quote! { #minnow::Weight::ONE #( #weight_terms )* },
         worst_case_bits: quote! { 0.0_f64 #( #bits_terms )* },
         best_case_bits: quote! { 0.0_f64 #( #best_bits_terms )* },
-        report: quote! { minnow::SizeReport::product(::std::vec![ #( #report_children ),* ]) },
+        report: quote! { #minnow::SizeReport::product(::std::vec![ #( #report_children ),* ]) },
     }
 }
 
@@ -164,6 +164,7 @@ fn product_metrics(fields: &[FieldSpec]) -> ProductMetrics {
 /// produces the `&FieldType` expression accessing field `i`.
 fn encode_stmts(
     fields: &[FieldSpec],
+    minnow: &TokenStream,
     accessor: impl Fn(usize, &FieldSpec) -> TokenStream,
 ) -> TokenStream {
     fields
@@ -174,7 +175,7 @@ fn encode_stmts(
             let model = &f.model;
             let access = accessor(i, f);
             quote_spanned! {ty.span()=>
-                minnow::EncodeableCustom::encode_with_config(#access, visitor, #model)?;
+                #minnow::EncodeableCustom::encode_with_config(#access, visitor, #model)?;
             }
         })
         .collect()
@@ -183,12 +184,17 @@ fn encode_stmts(
 /// Build the constructor expression for decoding a product: `path`,
 /// `path(...)`, or `path { ... }` depending on `shape`, decoding each field
 /// in order.
-fn decode_ctor(path: &TokenStream, shape: Shape, fields: &[FieldSpec]) -> TokenStream {
+fn decode_ctor(
+    path: &TokenStream,
+    shape: Shape,
+    fields: &[FieldSpec],
+    minnow: &TokenStream,
+) -> TokenStream {
     let decoded = fields.iter().map(|f| {
         let ty = &f.ty;
         let model = &f.model;
         quote_spanned! {ty.span()=>
-            <#ty as minnow::EncodeableCustom>::decode_with_config(visitor, #model)?
+            <#ty as #minnow::EncodeableCustom>::decode_with_config(visitor, #model)?
         }
     });
     match shape {
@@ -214,7 +220,7 @@ fn decode_ctor(path: &TokenStream, shape: Shape, fields: &[FieldSpec]) -> TokenS
 /// parameter; a field that merely mentions one (e.g. `Option<T>`) needs its
 /// bound spelled out by hand on the type declaration, which the where-clause
 /// this appends to still carries through untouched.
-fn add_generic_bounds(generics: &mut syn::Generics, fields: &[FieldSpec]) {
+fn add_generic_bounds(generics: &mut syn::Generics, fields: &[FieldSpec], minnow: &TokenStream) {
     let type_params: HashSet<syn::Ident> =
         generics.type_params().map(|tp| tp.ident.clone()).collect();
     if type_params.is_empty() {
@@ -236,20 +242,20 @@ fn add_generic_bounds(generics: &mut syn::Generics, fields: &[FieldSpec]) {
 
         where_clause
             .predicates
-            .push(syn::parse_quote! { #ident: minnow::EncodeableCustom });
+            .push(syn::parse_quote! { #ident: #minnow::EncodeableCustom });
         if !field.has_explicit_model {
             where_clause.predicates.push(syn::parse_quote! {
-                <#ident as minnow::EncodeableCustom>::Config: ::core::default::Default
+                <#ident as #minnow::EncodeableCustom>::Config: ::core::default::Default
             });
         }
     }
 }
 
-fn write_struct(struct_data: StructData) -> TokenStream {
-    let (shape, fields) = product_fields(&struct_data.fields);
-    let metrics = product_metrics(&fields);
+fn write_struct(struct_data: StructData, minnow: &TokenStream) -> TokenStream {
+    let (shape, fields) = product_fields(&struct_data.fields, minnow);
+    let metrics = product_metrics(&fields, minnow);
 
-    let encode_body = encode_stmts(&fields, |i, f| match shape {
+    let encode_body = encode_stmts(&fields, minnow, |i, f| match shape {
         Shape::Named => {
             let ident = &f.binding;
             quote! { &self.#ident }
@@ -261,10 +267,10 @@ fn write_struct(struct_data: StructData) -> TokenStream {
         Shape::Unit => TokenStream::new(),
     });
 
-    let decode_ctor_expr = decode_ctor(&quote! { Self }, shape, &fields);
+    let decode_ctor_expr = decode_ctor(&quote! { Self }, shape, &fields, minnow);
 
     let mut generics = struct_data.generics;
-    add_generic_bounds(&mut generics, &fields);
+    add_generic_bounds(&mut generics, &fields, minnow);
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let ident = struct_data.ident;
@@ -274,10 +280,10 @@ fn write_struct(struct_data: StructData) -> TokenStream {
     let report_body = metrics.report;
 
     quote! {
-        impl #impl_generics minnow::EncodeableCustom for #ident #ty_generics #where_clause {
+        impl #impl_generics #minnow::EncodeableCustom for #ident #ty_generics #where_clause {
             type Config = ();
 
-            fn weight(_config: &Self::Config) -> minnow::Weight {
+            fn weight(_config: &Self::Config) -> #minnow::Weight {
                 #weight_body
             }
 
@@ -289,21 +295,21 @@ fn write_struct(struct_data: StructData) -> TokenStream {
                 #best_case_body
             }
 
-            fn report(_config: &Self::Config) -> minnow::SizeReport {
+            fn report(_config: &Self::Config) -> #minnow::SizeReport {
                 #report_body
             }
 
-            fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> ::core::result::Result<(), minnow::EncodeError>
+            fn encode_with_config<W>(&self, visitor: &mut #minnow::EncodeVisitor<W>, _config: ()) -> ::core::result::Result<(), #minnow::EncodeError>
             where
-                W: bitstream_io::BitWrite,
+                W: #minnow::__private::BitWrite,
             {
                 #encode_body
                 Ok(())
             }
 
-            fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, _config: ()) -> ::core::result::Result<Self, minnow::DecodeError>
+            fn decode_with_config<R>(visitor: &mut #minnow::DecodeVisitor<R>, _config: ()) -> ::core::result::Result<Self, #minnow::DecodeError>
             where
-                R: bitstream_io::BitRead,
+                R: #minnow::__private::BitRead,
                 Self: Sized,
             {
                 Ok(#decode_ctor_expr)
@@ -335,7 +341,7 @@ struct VariantParts {
     report_child: TokenStream,
 }
 
-fn variant_parts(index: usize, variant: &EnumVariant) -> VariantParts {
+fn variant_parts(index: usize, variant: &EnumVariant, minnow: &TokenStream) -> VariantParts {
     let ident = &variant.ident;
     // A checked conversion rather than `as`: a panic in a proc macro is a
     // compile error, so an absurd variant count fails loudly instead of
@@ -344,8 +350,8 @@ fn variant_parts(index: usize, variant: &EnumVariant) -> VariantParts {
     let idx = syn::Index::from(index);
     let name = ident.to_string();
 
-    let (shape, fields) = product_fields(&variant.style);
-    let metrics = product_metrics(&fields);
+    let (shape, fields) = product_fields(&variant.style, minnow);
+    let metrics = product_metrics(&fields, minnow);
 
     let path = quote! { Self::#ident };
     let pattern = match shape {
@@ -363,7 +369,7 @@ fn variant_parts(index: usize, variant: &EnumVariant) -> VariantParts {
     // Under `match self { ... }` with `self: &Self`, every bound field name is
     // already a `&FieldType` thanks to match ergonomics, so it can be passed
     // straight through as the encode accessor.
-    let encode_field_stmts = encode_stmts(&fields, |_, f| {
+    let encode_field_stmts = encode_stmts(&fields, minnow, |_, f| {
         let binding = &f.binding;
         quote! { #binding }
     });
@@ -375,7 +381,7 @@ fn variant_parts(index: usize, variant: &EnumVariant) -> VariantParts {
         }
     };
 
-    let decode_ctor_expr = decode_ctor(&path, shape, &fields);
+    let decode_ctor_expr = decode_ctor(&path, shape, &fields, minnow);
     let decode_arm = quote! {
         #symbol => ::core::result::Result::Ok(#decode_ctor_expr),
     };
@@ -390,7 +396,7 @@ fn variant_parts(index: usize, variant: &EnumVariant) -> VariantParts {
 
     let payload_report = &metrics.report;
     let report_child = quote! {
-        minnow::SizeReport::enum_variant(
+        #minnow::SizeReport::enum_variant(
             #name,
             model.discriminant_bits(#idx),
             #payload_report,
@@ -408,12 +414,12 @@ fn variant_parts(index: usize, variant: &EnumVariant) -> VariantParts {
     }
 }
 
-fn write_enum(enum_data: EnumData) -> TokenStream {
+fn write_enum(enum_data: EnumData, minnow: &TokenStream) -> TokenStream {
     let parts: Vec<VariantParts> = enum_data
         .variants
         .iter()
         .enumerate()
-        .map(|(i, v)| variant_parts(i, v))
+        .map(|(i, v)| variant_parts(i, v, minnow))
         .collect();
 
     let ident = enum_data.ident;
@@ -421,10 +427,10 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
     let all_fields: Vec<FieldSpec> = enum_data
         .variants
         .iter()
-        .flat_map(|v| product_fields(&v.style).1)
+        .flat_map(|v| product_fields(&v.style, minnow).1)
         .collect();
     let mut generics = enum_data.generics;
-    add_generic_bounds(&mut generics, &all_fields);
+    add_generic_bounds(&mut generics, &all_fields, minnow);
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let encode_arms = parts.iter().map(|p| &p.encode_arm);
@@ -436,7 +442,7 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
     // methods cannot drift apart in how they weight the discriminant.
     let discriminant_weights = parts.iter().map(|p| &p.discriminant_weight);
     let model_ctor = quote! {
-        minnow::WeightedModel::new([ #( #discriminant_weights ),* ])
+        #minnow::WeightedModel::new([ #( #discriminant_weights ),* ])
     };
 
     // `worst_case_bits`: max over variants of (discriminant bits + payload bits).
@@ -460,12 +466,12 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
     let report_children = parts.iter().map(|p| &p.report_child);
 
     quote! {
-        impl #impl_generics minnow::EncodeableCustom for #ident #ty_generics #where_clause {
+        impl #impl_generics #minnow::EncodeableCustom for #ident #ty_generics #where_clause {
             type Config = ();
 
-            fn weight(_config: &Self::Config) -> minnow::Weight {
+            fn weight(_config: &Self::Config) -> #minnow::Weight {
                 // Sum rule: the type's cardinality is the sum of its variants'.
-                minnow::Weight::ZERO #( + #cardinalities )*
+                #minnow::Weight::ZERO #( + #cardinalities )*
             }
 
             fn worst_case_bits(_config: &Self::Config) -> f64 {
@@ -482,28 +488,28 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
                 best
             }
 
-            fn report(_config: &Self::Config) -> minnow::SizeReport {
+            fn report(_config: &Self::Config) -> #minnow::SizeReport {
                 let model = #model_ctor;
-                minnow::SizeReport::sum(::std::vec![ #( #report_children ),* ])
+                #minnow::SizeReport::sum(::std::vec![ #( #report_children ),* ])
             }
 
-            fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> ::core::result::Result<(), minnow::EncodeError>
+            fn encode_with_config<W>(&self, visitor: &mut #minnow::EncodeVisitor<W>, _config: ()) -> ::core::result::Result<(), #minnow::EncodeError>
             where
-                W: bitstream_io::BitWrite {
+                W: #minnow::__private::BitWrite {
                 let model = #model_ctor;
                 match self {
                     #( #encode_arms )*
                 }
             }
 
-            fn decode_with_config<R>(visitor: &mut minnow::DecodeVisitor<R>, _config: ()) -> ::core::result::Result<Self, minnow::DecodeError>
+            fn decode_with_config<R>(visitor: &mut #minnow::DecodeVisitor<R>, _config: ()) -> ::core::result::Result<Self, #minnow::DecodeError>
             where
-                R: bitstream_io::BitRead,
+                R: #minnow::__private::BitRead,
                 Self: Sized {
                 let model = #model_ctor;
                 match visitor.decode_one(model)? {
                     #( #decode_arms )*
-                    other => ::core::result::Result::Err(minnow::DecodeError::InvalidSymbol { symbol: u128::from(other) }),
+                    other => ::core::result::Result::Err(#minnow::DecodeError::InvalidSymbol { symbol: u128::from(other) }),
                 }
             }
         }

@@ -122,7 +122,10 @@ impl Model {
     /// This is the single source of truth for that lowering — struct fields and
     /// enum-variant payloads must generate identical config expressions, or the
     /// two paths drift.
-    pub fn config_tokens(model: Option<&Self>) -> proc_macro2::TokenStream {
+    pub fn config_tokens(
+        model: Option<&Self>,
+        minnow: &proc_macro2::TokenStream,
+    ) -> proc_macro2::TokenStream {
         use quote::quote;
         match model {
             Some(Self::Float {
@@ -133,7 +136,7 @@ impl Model {
             }) => {
                 let clamping = clamping.then(|| quote! { .clamping() });
                 quote! {
-                    minnow::FloatModel::new( #min ..= #max, #precision )
+                    #minnow::FloatModel::new( #min ..= #max, #precision )
                         .expect("model bounds validated at compile time")
                         #clamping
                 }
@@ -150,14 +153,14 @@ impl Model {
                 let min = proc_macro2::Literal::i128_unsuffixed(*min);
                 let max = proc_macro2::Literal::i128_unsuffixed(*max);
                 quote! {
-                    minnow::IntModel::new( #min ..= #max )
+                    #minnow::IntModel::new( #min ..= #max )
                         .expect("model bounds validated at compile time")
                         #clamping
                 }
             }
             Some(Self::String { max_length }) => {
                 quote! {
-                    minnow::StringModel::new( #max_length )
+                    #minnow::StringModel::new( #max_length )
                         .expect("model bounds validated at compile time")
                 }
             }
@@ -167,7 +170,7 @@ impl Model {
                     |expr| quote! { #expr },
                 );
                 quote! {
-                    minnow::SeqModel { max_len: #max_len, elem: #elem }
+                    #minnow::SeqModel { max_len: #max_len, elem: #elem }
                 }
             }
             Some(Self::Config(expr)) => quote! { #expr },

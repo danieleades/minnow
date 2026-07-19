@@ -10,7 +10,7 @@ categories.workspace = true
 rust-version.workspace = true
 
 [workspace]
-members = [".", "minnow-derive"]
+members = [".", "minnow-derive", "tests/downstream/direct", "tests/downstream/renamed"]
 
 [workspace.package]
 version = "0.1.0"

@@ -5,7 +5,10 @@
 
 use darling::{FromDeriveInput, export::syn};
 use proc_macro::TokenStream;
+use proc_macro_crate::{FoundCrate, crate_name};
+use proc_macro2::Span;
 use process::process;
+use quote::quote;
 use syn::parse_macro_input;
 
 mod parse;
@@ -122,6 +125,33 @@ pub fn derive(input: TokenStream) -> TokenStream {
     };
 
     let processed = process(receiver);
+    let minnow = match minnow_crate_path() {
+        Ok(path) => path,
+        Err(error) => return error.into_compile_error().into(),
+    };
 
-    write::write(processed).into()
+    write::write(processed, &minnow).into()
+}
+
+/// Resolve the runtime crate from the manifest of the crate invoking the
+/// derive. Procedural macros have no `$crate` equivalent, so the package name
+/// must be translated to the dependency name visible at the call site.
+fn minnow_crate_path() -> Result<proc_macro2::TokenStream, syn::Error> {
+    let found = crate_name("minnow").map_err(|error| {
+        syn::Error::new(
+            Span::call_site(),
+            format!("could not resolve the `minnow` crate for this derive: {error}"),
+        )
+    })?;
+
+    Ok(match found {
+        // Package-owned targets such as examples also report `Itself`, but
+        // `crate` names the target crate there. The runtime crate provides a
+        // self-alias so `::minnow` works both in the library and those targets.
+        FoundCrate::Itself => quote! { ::minnow },
+        FoundCrate::Name(name) => {
+            let ident = syn::Ident::new(&name, Span::call_site());
+            quote! { ::#ident }
+        }
+    })
 }
