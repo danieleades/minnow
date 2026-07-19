@@ -29,7 +29,7 @@ mod weight;
 
 pub use encodeable::Encodeable;
 pub use encodeable_custom::EncodeableCustom;
-pub use error::DecodeError;
+pub use error::{DecodeError, EncodeError};
 pub use float::FloatModel;
 pub use impls::{one_shot::OneShot, weighted::WeightedModel};
 pub use int::IntModel;

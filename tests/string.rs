@@ -14,7 +14,7 @@ fn round_trips_empty_and_max_and_multibyte() {
     let config = StringModel::new(16).unwrap();
 
     // Empty.
-    let bytes = String::new().encode_bytes_with_config(config);
+    let bytes = String::new().encode_bytes_with_config(config).unwrap();
     assert_eq!(
         String::decode_bytes_with_config(&bytes, config).unwrap(),
         ""
@@ -23,7 +23,7 @@ fn round_trips_empty_and_max_and_multibyte() {
     // Exactly max_length bytes (ASCII, so 16 bytes == 16 chars).
     let max = "0123456789abcdef".to_string();
     assert_eq!(max.len(), 16);
-    let bytes = max.clone().encode_bytes_with_config(config);
+    let bytes = max.clone().encode_bytes_with_config(config).unwrap();
     assert_eq!(
         String::decode_bytes_with_config(&bytes, config).unwrap(),
         max
@@ -32,7 +32,7 @@ fn round_trips_empty_and_max_and_multibyte() {
     // Multibyte UTF-8 (emoji, accented characters), well under the byte
     // budget.
     for s in ["héllo", "日本語", "🦀🎉", "café"] {
-        let bytes = s.to_string().encode_bytes_with_config(config);
+        let bytes = s.to_string().encode_bytes_with_config(config).unwrap();
         assert_eq!(String::decode_bytes_with_config(&bytes, config).unwrap(), s);
     }
 }
@@ -43,7 +43,7 @@ fn derive_string_sugar_round_trips() {
         let value = Message {
             text: text.to_string(),
         };
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         let decoded = Message::decode_bytes(&bytes).unwrap();
         assert_eq!(decoded, value);
     }
@@ -67,7 +67,7 @@ fn encoding_beyond_max_length_is_rejected_not_panicked() {
         .text
         .encode_with_config(&mut encoder, config)
         .unwrap_err();
-    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(matches!(err, minnow::EncodeError::TooLong { .. }));
 }
 
 fn minnow_derive_config() -> StringModel {
@@ -83,10 +83,12 @@ fn corrupt_bytes_never_panic_and_invalid_utf8_is_reported() {
     for len in 0..8 {
         for fill in [0x00_u8, 0xff_u8] {
             let raw_bytes: Vec<u8> = vec![fill; len];
-            let encoded = raw_bytes.encode_bytes_with_config(minnow::SeqModel {
-                max_len: 8,
-                elem: minnow::IntModel::<u8>::default(),
-            });
+            let encoded = raw_bytes
+                .encode_bytes_with_config(minnow::SeqModel {
+                    max_len: 8,
+                    elem: minnow::IntModel::<u8>::default(),
+                })
+                .unwrap();
             let result = String::decode_bytes_with_config(&encoded, config);
             // Either it's a valid (if degenerate) UTF-8 string, or it's
             // reported as invalid UTF-8 -- either way, no panic, and any

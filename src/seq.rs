@@ -47,12 +47,14 @@
 //! [`crate::DecodeError::Length`]) is wide rather than pinned to an exact
 //! value — it still never rejects a genuinely valid encoding.
 
-use std::{convert::Infallible, io, ops::Range};
+use std::{convert::Infallible, ops::Range};
 
 use arithmetic_coding::one_shot;
 use bitstream_io::{BitRead, BitWrite};
 
-use crate::{DecodeError, DecodeVisitor, EncodeVisitor, EncodeableCustom, SizeReport, Weight};
+use crate::{
+    DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, EncodeableCustom, SizeReport, Weight,
+};
 
 /// A uniform one-shot model over `0..=max_len` — the length prefix shared by
 /// [`SeqModel`]/[`crate::StringModel`].
@@ -169,19 +171,18 @@ where
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: Self::Config,
-    ) -> io::Result<()>
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
         let len = self.len();
         if len > config.max_len as usize {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "cannot encode a {len}-element Vec: exceeds the configured max_len ({})",
-                    config.max_len
-                ),
-            ));
+            // No clamping mode for sequences: truncation would silently
+            // drop elements, which is not a nearest-value projection.
+            return Err(EncodeError::TooLong {
+                len,
+                max_len: config.max_len,
+            });
         }
         // `len <= config.max_len`, a `u32`, so this cast cannot truncate.
         #[allow(clippy::cast_possible_truncation)]
@@ -287,7 +288,7 @@ mod tests {
             elem: (),
         };
         let empty: Vec<bool> = Vec::new();
-        let bytes = empty.encode_bytes_with_config(config);
+        let bytes = empty.encode_bytes_with_config(config).unwrap();
 
         // The empty vector is the cheapest value: just the length prefix,
         // `log2(11)` bits.
@@ -304,7 +305,7 @@ mod tests {
         };
         for len in 0..=5 {
             let value: Vec<bool> = vec![true; len];
-            let bytes = value.encode_bytes_with_config(config);
+            let bytes = value.encode_bytes_with_config(config).unwrap();
             let decoded = <Vec<bool>>::decode_bytes_with_config(&bytes, config).unwrap();
             assert_eq!(decoded, value);
         }
@@ -320,7 +321,7 @@ mod tests {
         let mut writer = bitstream_io::BitWriter::endian(Vec::new(), bitstream_io::BigEndian);
         let mut encoder = crate::EncodeVisitor::new(crate::PRECISION, &mut writer);
         let err = value.encode_with_config(&mut encoder, config).unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, crate::EncodeError::TooLong { .. }));
     }
 
     /// The report (and the decode length check that used to build it) must

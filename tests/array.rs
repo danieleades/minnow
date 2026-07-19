@@ -12,7 +12,7 @@ fn round_trip() {
         three_vec: [1.0, 2.0, 3.0],
     };
 
-    let compressed = input.encode_bytes();
+    let compressed = input.encode_bytes().unwrap();
 
     let output = MyStruct::decode_bytes(&compressed).unwrap();
 

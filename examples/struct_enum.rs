@@ -17,7 +17,7 @@ fn y_model() -> FloatModel<f64> {
 }
 
 impl Encodeable for MyEnum {
-    fn encode<W>(&self, visitor: &mut minnow::EncodeVisitor<W>) -> std::io::Result<()>
+    fn encode<W>(&self, visitor: &mut minnow::EncodeVisitor<W>) -> Result<(), minnow::EncodeError>
     where
         W: bitstream_io::BitWrite,
     {
@@ -82,7 +82,7 @@ fn main() {
     for input in [MyEnum::A { x: -5.0, y: 15.0 }, MyEnum::B] {
         println!("input: {input:?}");
 
-        let compressed = input.encode_bytes();
+        let compressed = input.encode_bytes().unwrap();
         println!("bytes: {}", compressed.len());
 
         let output = MyEnum::decode_bytes(&compressed).expect("round-trip should succeed");

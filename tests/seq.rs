@@ -33,7 +33,7 @@ fn vec_f64_round_trips_at_length_extremes() {
             elem: elem.clone(),
         };
         let value: Vec<f64> = (0..len).map(as_f64).collect();
-        let bytes = value.encode_bytes_with_config(config.clone());
+        let bytes = value.encode_bytes_with_config(config.clone()).unwrap();
         let decoded = <Vec<f64>>::decode_bytes_with_config(&bytes, config).unwrap();
         assert_eq!(decoded, value);
     }
@@ -48,7 +48,7 @@ fn vec_enum_round_trips_at_length_extremes() {
     let all = [Flag::Red, Flag::Green, Flag::Blue, Flag::Red];
     for len in [0, 1, 4] {
         let value: Vec<Flag> = all[..len].to_vec();
-        let bytes = value.encode_bytes_with_config(config);
+        let bytes = value.encode_bytes_with_config(config).unwrap();
         let decoded = <Vec<Flag>>::decode_bytes_with_config(&bytes, config).unwrap();
         assert_eq!(decoded, value);
     }
@@ -61,7 +61,7 @@ fn derive_seq_sugar_round_trips() {
             readings: (0..len).map(as_f64).collect(),
             flags: vec![Flag::Blue; len],
         };
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         let decoded = Samples::decode_bytes(&bytes).unwrap();
         assert_eq!(decoded, value);
     }
@@ -97,7 +97,7 @@ fn per_length_size_law_matches_formula() {
             elem: elem.clone(),
         };
         let value: Vec<f64> = (0..len).map(|i| as_f64(i as usize)).collect();
-        let bytes = value.encode_bytes_with_config(config);
+        let bytes = value.encode_bytes_with_config(config).unwrap();
 
         let expected_bits = (f64::from(max_len) + 1.0).log2()
             + f64::from(len) * elem_bits

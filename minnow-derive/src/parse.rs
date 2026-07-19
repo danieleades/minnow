@@ -60,6 +60,10 @@ pub enum Model {
         min: Number<f64>,
         max: Number<f64>,
         precision: Number<i8>,
+        /// `clamping` opts into coercing out-of-range values to the nearest
+        /// bound instead of an `EncodeError::OutOfRange`.
+        #[darling(default)]
+        clamping: bool,
     },
     /// `#[encode(int(min = a, max = b))]` — a bounded integer, uniform over
     /// `a..=b`. Lowers to `minnow::IntModel::new(a..=b)`; the target integer
@@ -68,6 +72,10 @@ pub enum Model {
     Int {
         min: Number<i128>,
         max: Number<i128>,
+        /// `clamping` opts into coercing out-of-range values to the nearest
+        /// bound instead of an `EncodeError::OutOfRange`.
+        #[darling(default)]
+        clamping: bool,
     },
     String {
         max_length: usize,
@@ -110,14 +118,21 @@ impl Model {
                 min: Number(min),
                 max: Number(max),
                 precision: Number(precision),
-            }) => quote! {
-                minnow::FloatModel::new( #min ..= #max, #precision )
-                    .expect("model bounds validated at compile time")
-            },
+                clamping,
+            }) => {
+                let clamping = clamping.then(|| quote! { .clamping() });
+                quote! {
+                    minnow::FloatModel::new( #min ..= #max, #precision )
+                        .expect("model bounds validated at compile time")
+                        #clamping
+                }
+            }
             Some(Self::Int {
                 min: Number(min),
                 max: Number(max),
+                clamping,
             }) => {
+                let clamping = clamping.then(|| quote! { .clamping() });
                 // Emit unsuffixed integer literals so their type is inferred
                 // from context (the field's concrete integer type, via
                 // `IntModel<T>`'s `T`) rather than fixed to `i128`.
@@ -126,6 +141,7 @@ impl Model {
                 quote! {
                     minnow::IntModel::new( #min ..= #max )
                         .expect("model bounds validated at compile time")
+                        #clamping
                 }
             }
             Some(Self::String { max_length }) => {
@@ -161,6 +177,7 @@ impl Model {
                 min: Number(min),
                 max: Number(max),
                 precision: Number(precision),
+                clamping: _,
             } => {
                 if !min.is_finite() || !max.is_finite() {
                     return Err(
@@ -199,6 +216,7 @@ impl Model {
             Model::Int {
                 min: Number(min),
                 max: Number(max),
+                clamping: _,
             } => {
                 if min > max {
                     return Err(format!(
@@ -452,6 +470,7 @@ mod tests {
             min: Number(0.0),
             max: Number(max),
             precision: Number(0),
+            clamping: false,
         };
         model.validate().is_ok()
     }
@@ -467,6 +486,7 @@ mod tests {
         let model = Model::Int {
             min: Number(0),
             max: Number(max),
+            clamping: false,
         };
         model.validate().is_ok()
     }
@@ -477,6 +497,7 @@ mod tests {
         let model = Model::Int {
             min: Number(10),
             max: Number(-10),
+            clamping: false,
         };
         assert!(model.validate().is_err());
     }
@@ -487,6 +508,7 @@ mod tests {
         let model = Model::Int {
             min: Number(-10),
             max: Number(10),
+            clamping: false,
         };
         assert!(model.validate().is_ok());
     }

@@ -108,7 +108,7 @@ fn truncated_valid_encodings_never_panic() {
         vehicle_class: Some(VehicleClass::Ship),
         battery_ok: Some(false),
     };
-    let encoded = report.encode_bytes();
+    let encoded = report.encode_bytes().unwrap();
 
     for len in 0..=encoded.len() {
         assert_no_panic::<Report>(&encoded[..len]);
@@ -116,14 +116,14 @@ fn truncated_valid_encodings_never_panic() {
 
     // Also exercise the simple leaf/​sum types.
     for value in [true, false] {
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         for len in 0..=bytes.len() {
             assert_no_panic::<bool>(&bytes[..len]);
         }
     }
 
     for value in [Some(true), Some(false), None] {
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         for len in 0..=bytes.len() {
             assert_no_panic::<Option<bool>>(&bytes[..len]);
         }
@@ -136,7 +136,7 @@ fn truncated_valid_encodings_never_panic() {
         flags: vec![true, false, true, true],
         label: "hello".to_string(),
     };
-    let bytes = with_sequences.encode_bytes();
+    let bytes = with_sequences.encode_bytes().unwrap();
     for len in 0..=bytes.len() {
         assert_no_panic::<WithSequences>(&bytes[..len]);
     }
@@ -154,9 +154,11 @@ fn corrupt_and_truncated_sequences_never_panic_or_oom() {
     let string_config = minnow::StringModel::new(12).unwrap();
 
     let valid_vec: Vec<bool> = vec![true, false, true];
-    let valid_vec_bytes = valid_vec.encode_bytes_with_config(seq_config);
+    let valid_vec_bytes = valid_vec.encode_bytes_with_config(seq_config).unwrap();
     let valid_string = "hello!".to_string();
-    let valid_string_bytes = valid_string.encode_bytes_with_config(string_config);
+    let valid_string_bytes = valid_string
+        .encode_bytes_with_config(string_config)
+        .unwrap();
 
     let mut rng = Rng::new(0xc0ff_ee00);
     for _ in 0..5_000 {
@@ -200,7 +202,7 @@ fn truncations_are_rejected() {
         vehicle_class: Some(VehicleClass::Ship),
         battery_ok: Some(false),
     };
-    let encoded = report.encode_bytes();
+    let encoded = report.encode_bytes().unwrap();
 
     assert!(
         Report::decode_bytes(&encoded).is_ok(),
@@ -233,7 +235,7 @@ fn valid_round_trip_still_works() {
         vehicle_class: Some(VehicleClass::Auv),
         battery_ok: None,
     };
-    let encoded = report.encode_bytes();
+    let encoded = report.encode_bytes().unwrap();
     let decoded = Report::decode_bytes(&encoded).unwrap();
     assert_eq!(report, decoded);
 }

@@ -41,14 +41,15 @@ impl EncodeableCustom for Bounded {
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: Self::Config,
-    ) -> std::io::Result<()>
+    ) -> Result<(), minnow::EncodeError>
     where
         W: bitstream_io::BitWrite,
     {
         let model = minnow::WeightedModel::new(vec![1_u128; config.denominator() as usize]);
         #[allow(clippy::cast_sign_loss)]
         let symbol = (self.0 - config.min) as u32;
-        visitor.encode_one(model, &symbol)
+        visitor.encode_one(model, &symbol)?;
+        Ok(())
     }
 
     fn decode_with_config<R>(
@@ -74,7 +75,7 @@ pub struct WithCustomModel {
 #[test]
 fn custom_model_round_trips() {
     let input = WithCustomModel { level: Bounded(-3) };
-    let bytes = input.encode_bytes();
+    let bytes = input.encode_bytes().unwrap();
     let output = WithCustomModel::decode_bytes(&bytes).unwrap();
     assert_eq!(input, output);
 }
@@ -107,13 +108,13 @@ fn config_expr_matches_float_sugar() {
     let expr = ViaConfigExpr { x: 42.5 };
 
     // Same underlying model, so the wire format is identical.
-    assert_eq!(sugar.encode_bytes(), expr.encode_bytes());
+    assert_eq!(sugar.encode_bytes().unwrap(), expr.encode_bytes().unwrap());
     assert_eq!(
         ViaSugar::size_report().total_bytes(),
         ViaConfigExpr::size_report().total_bytes()
     );
 
-    let bytes = expr.encode_bytes();
+    let bytes = expr.encode_bytes().unwrap();
     let decoded = ViaConfigExpr::decode_bytes(&bytes).unwrap();
     assert_eq!(decoded, expr);
 }

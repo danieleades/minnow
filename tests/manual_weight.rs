@@ -33,8 +33,8 @@ fn repeated_heavy_variant_encodes_smaller() {
     let commons = [Biased::Common; 64];
     let rares = [Biased::Rare; 64];
 
-    let common_len = commons.encode_bytes().len();
-    let rare_len = rares.encode_bytes().len();
+    let common_len = commons.encode_bytes().unwrap().len();
+    let rare_len = rares.encode_bytes().unwrap().len();
 
     assert!(
         common_len < rare_len,
@@ -43,8 +43,8 @@ fn repeated_heavy_variant_encodes_smaller() {
 
     // Both still round-trip, even though their lengths differ wildly: the decode
     // length check must not reject the (very short) all-Common encoding.
-    let commons_bytes = commons.encode_bytes();
-    let rares_bytes = rares.encode_bytes();
+    let commons_bytes = commons.encode_bytes().unwrap();
+    let rares_bytes = rares.encode_bytes().unwrap();
     assert_eq!(
         <[Biased; 64]>::decode_bytes(&commons_bytes).unwrap(),
         commons

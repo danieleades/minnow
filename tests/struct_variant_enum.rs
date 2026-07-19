@@ -68,7 +68,7 @@ fn round_trip_every_variant_kind() {
         },
     ];
     for value in values {
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         let decoded = Shape::decode_bytes(&bytes).expect("valid encoding must decode");
         assert_eq!(decoded, value);
     }
@@ -81,14 +81,18 @@ fn size_law_holds_across_variant_kinds() {
 
     for _ in 0..5_000 {
         let value = rng.shape();
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         assert!(
             bytes.len() <= upper,
             "{value:?} encoded to {} bytes, exceeding size_report().total_bytes() = {upper}",
             bytes.len(),
         );
         let decoded = Shape::decode_bytes(&bytes).expect("a valid encoding must decode");
-        assert_eq!(decoded.encode_bytes(), bytes, "re-encoding must be stable");
+        assert_eq!(
+            decoded.encode_bytes().unwrap(),
+            bytes,
+            "re-encoding must be stable"
+        );
     }
 }
 

@@ -28,7 +28,7 @@ fn round_trips_at_extremes() {
                     raw,
                     counter,
                 };
-                let bytes = value.encode_bytes();
+                let bytes = value.encode_bytes().unwrap();
                 let decoded = Reading::decode_bytes(&bytes).unwrap();
                 assert_eq!(decoded, value);
             }
@@ -40,7 +40,7 @@ fn round_trips_at_extremes() {
 fn negative_only_range_round_trips() {
     let config = IntModel::new(-1000_i32..=-1).unwrap();
     for value in [-1000, -500, -1] {
-        let bytes = value.encode_bytes_with_config(config);
+        let bytes = value.encode_bytes_with_config(config).unwrap();
         let decoded = i32::decode_bytes_with_config(&bytes, config).unwrap();
         assert_eq!(decoded, value);
     }
@@ -53,7 +53,7 @@ fn single_value_range_costs_zero_bits() {
     let config = IntModel::new(42_i32..=42).unwrap();
     assert_eq!(<i32 as EncodeableCustom>::weight(&config).get(), 1);
     assert_eq!(<i32 as EncodeableCustom>::worst_case_bits(&config), 0.0);
-    let bytes = 42_i32.encode_bytes_with_config(config);
+    let bytes = 42_i32.encode_bytes_with_config(config).unwrap();
     assert_eq!(i32::decode_bytes_with_config(&bytes, config).unwrap(), 42);
 }
 
@@ -61,7 +61,7 @@ fn single_value_range_costs_zero_bits() {
 fn i64_and_u64_extremes_round_trip() {
     let signed = IntModel::new(i64::MIN..=i64::MIN + 1_000_000).unwrap();
     for value in [i64::MIN, i64::MIN + 500_000, i64::MIN + 1_000_000] {
-        let bytes = value.encode_bytes_with_config(signed);
+        let bytes = value.encode_bytes_with_config(signed).unwrap();
         assert_eq!(
             i64::decode_bytes_with_config(&bytes, signed).unwrap(),
             value
@@ -70,7 +70,7 @@ fn i64_and_u64_extremes_round_trip() {
 
     let unsigned = IntModel::new(u64::MAX - 1_000_000..=u64::MAX).unwrap();
     for value in [u64::MAX - 1_000_000, u64::MAX - 500_000, u64::MAX] {
-        let bytes = value.encode_bytes_with_config(unsigned);
+        let bytes = value.encode_bytes_with_config(unsigned).unwrap();
         assert_eq!(
             u64::decode_bytes_with_config(&bytes, unsigned).unwrap(),
             value
@@ -92,7 +92,7 @@ fn size_law_holds() {
                     raw,
                     counter,
                 };
-                let bytes = value.encode_bytes();
+                let bytes = value.encode_bytes().unwrap();
                 assert!(bytes.len() <= upper);
                 lengths.push(bytes.len());
             }
@@ -115,4 +115,36 @@ fn worst_case_bits_matches_formula() {
         (bits - expected).abs() < 1e-9,
         "expected {expected}, got {bits}"
     );
+}
+
+/// Encode-domain semantics through the derive: out-of-range values error by
+/// default and clamp only under the explicit `clamping` flag.
+#[test]
+fn out_of_range_errors_by_default_and_clamps_on_opt_in() {
+    #[derive(Debug, Encodeable, PartialEq, Eq)]
+    struct Strict {
+        #[encode(int(min = 0, max = 10))]
+        value: u8,
+    }
+
+    #[derive(Debug, Encodeable, PartialEq, Eq)]
+    struct Clamped {
+        #[encode(int(min = 0, max = 10, clamping))]
+        value: u8,
+    }
+
+    assert!(matches!(
+        Strict { value: 200 }.encode_bytes(),
+        Err(minnow::EncodeError::OutOfRange { .. })
+    ));
+
+    let encoded = Clamped { value: 200 }.encode_bytes().unwrap();
+    assert_eq!(
+        Clamped::decode_bytes(&encoded).unwrap(),
+        Clamped { value: 10 }
+    );
+
+    // In-range values are untouched in either mode.
+    let encoded = Strict { value: 7 }.encode_bytes().unwrap();
+    assert_eq!(Strict::decode_bytes(&encoded).unwrap(), Strict { value: 7 });
 }

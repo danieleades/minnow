@@ -15,8 +15,8 @@ use arithmetic_coding::one_shot;
 use num_traits::PrimInt;
 
 use crate::{
-    DecodeError, DecodeVisitor, EncodeVisitor, EncodeableCustom, MAX_DENOMINATOR, ModelError,
-    PRECISION, Weight,
+    DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, EncodeableCustom, MAX_DENOMINATOR,
+    ModelError, PRECISION, Weight,
 };
 
 /// Convert a supported integer type to `i128`.
@@ -56,6 +56,7 @@ fn width<T: PrimInt>(min: T, max: T) -> u128 {
 pub struct IntModel<T> {
     min: T,
     max: T,
+    clamping: bool,
 }
 
 impl<T> IntModel<T>
@@ -64,8 +65,8 @@ where
 {
     /// Create a new [`IntModel`] over the given inclusive range.
     ///
-    /// Values outside this range are coerced to the nearest bound when
-    /// encoding, matching [`FloatModel`](crate::FloatModel).
+    /// Encoding a value outside this range is an [`EncodeError::OutOfRange`]
+    /// unless [clamping](IntModel::clamping) mode is enabled.
     ///
     /// # Errors
     ///
@@ -92,7 +93,45 @@ where
             });
         }
 
-        Ok(Self { min, max })
+        Ok(Self {
+            min,
+            max,
+            clamping: false,
+        })
+    }
+
+    /// Enable clamping mode: encoding a value outside `min..=max` clamps it
+    /// to the nearest bound instead of returning
+    /// [`EncodeError::OutOfRange`].
+    ///
+    /// Clamping is the right policy for naturally saturating sources
+    /// (sensor channels) and the wrong one for most everything else — hence
+    /// opt-in; see [`EncodeError`] for the reasoning.
+    #[must_use]
+    pub const fn clamping(mut self) -> Self {
+        self.clamping = true;
+        self
+    }
+
+    /// Validate `value` against this model's domain, returning the value that
+    /// will actually be encoded.
+    ///
+    /// # Errors
+    ///
+    /// [`EncodeError::OutOfRange`] for values outside `min..=max`, unless
+    /// [clamping](IntModel::clamping) mode is enabled.
+    fn admit(&self, value: T) -> Result<T, EncodeError> {
+        if value < self.min || value > self.max {
+            if self.clamping {
+                return Ok(num_traits::clamp(value, self.min, self.max));
+            }
+            return Err(EncodeError::OutOfRange {
+                value: format!("{value:?}"),
+                min: format!("{:?}", self.min),
+                max: format!("{:?}", self.max),
+            });
+        }
+        Ok(value)
     }
 
     /// The number of distinct values this model can encode — its
@@ -103,16 +142,13 @@ where
     }
 
     /// The offset of `value` from `min`, as a `u128` in `0..denominator()`.
-    ///
-    /// Values outside `min..=max` are clamped to the nearest bound, matching
-    /// [`FloatModel`](crate::FloatModel)'s coercion semantics — so encoding
-    /// an out-of-range integer is lossy, never a panic or a violation of the
-    /// coder's interval contract.
     fn offset(&self, value: T) -> u128 {
-        let clamped = num_traits::clamp(value, self.min, self.max);
-        let diff = to_i128(clamped) - to_i128(self.min);
-        // `clamped >= min`, so the difference is non-negative.
-        u128::try_from(diff).expect("clamped value is at least min")
+        debug_assert!(
+            value >= self.min && value <= self.max,
+            "offset is only called with admitted (in-range) values"
+        );
+        let diff = to_i128(value) - to_i128(self.min);
+        u128::try_from(diff).expect("admitted value is at least min")
     }
 
     /// The inverse of [`IntModel::offset`].
@@ -176,11 +212,13 @@ macro_rules! impl_int_leaf {
                 &self,
                 visitor: &mut EncodeVisitor<W>,
                 config: Self::Config,
-            ) -> std::io::Result<()>
+            ) -> Result<(), EncodeError>
             where
                 W: bitstream_io::BitWrite,
             {
-                visitor.encode_one(config, self)
+                let value = config.admit(*self)?;
+                visitor.encode_one(config, &value)?;
+                Ok(())
             }
 
             fn decode_with_config<R>(
@@ -284,22 +322,20 @@ mod tests {
         assert_eq!(model.denominator(), 256);
     }
 
-    /// Out-of-range symbols clamp to the nearest bound instead of panicking
-    /// (below `min`) or emitting an interval past the denominator (above
-    /// `max`), which would violate the coder's model contract.
+    /// Out-of-range values are an error by default and clamp only under the
+    /// explicit clamping opt-in.
     #[test]
-    fn out_of_range_symbols_clamp_to_bounds() {
-        let model = IntModel::new(0_u8..=10).unwrap();
-        assert_eq!(
-            Model::probability(&model, &11).unwrap(),
-            Model::probability(&model, &10).unwrap()
-        );
-        assert!(Model::probability(&model, &255).unwrap().end <= model.denominator());
+    fn admit_semantics() {
+        let strict = IntModel::new(0_u8..=10).unwrap();
+        assert_eq!(strict.admit(7).unwrap(), 7);
+        assert!(matches!(
+            strict.admit(11),
+            Err(crate::EncodeError::OutOfRange { .. })
+        ));
 
-        let signed = IntModel::new(-5_i32..=5).unwrap();
-        assert_eq!(
-            Model::probability(&signed, &-100).unwrap(),
-            Model::probability(&signed, &-5).unwrap()
-        );
+        let clamping = IntModel::new(-5_i32..=5).unwrap().clamping();
+        assert_eq!(clamping.admit(-100).unwrap(), -5);
+        assert_eq!(clamping.admit(100).unwrap(), 5);
+        assert_eq!(clamping.admit(3).unwrap(), 3);
     }
 }

@@ -1,9 +1,7 @@
-use std::io;
-
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 
 use crate::{
-    DecodeError, PRECISION, SizeReport,
+    DecodeError, EncodeError, PRECISION, SizeReport,
     encodeable_custom::EncodeableCustom,
     visitor::{DecodeVisitor, EncodeVisitor},
 };
@@ -19,9 +17,9 @@ pub trait Encodeable {
     ///
     /// # Errors
     ///
-    /// This method can fail if the [`EncodeVisitor`]'s underlying writer cannot
-    /// be written to.
-    fn encode<W>(&self, visitor: &mut EncodeVisitor<W>) -> io::Result<()>
+    /// Returns [`EncodeError`] if a value lies outside its model's configured
+    /// domain, or if the underlying writer cannot be written to.
+    fn encode<W>(&self, visitor: &mut EncodeVisitor<W>) -> Result<(), EncodeError>
     where
         W: BitWrite;
 
@@ -58,27 +56,20 @@ pub trait Encodeable {
 
     /// Encode the struct into a [`Vec<u8>`].
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// This method is infallible in practice: writing to a `Vec<u8>` cannot
-    /// produce an I/O error. It will only panic if that invariant is somehow
-    /// violated.
-    fn encode_bytes(&self) -> Vec<u8> {
+    /// Returns [`EncodeError`] if a value lies outside its model's configured
+    /// domain. Writing to the `Vec<u8>` itself cannot fail.
+    fn encode_bytes(&self) -> Result<Vec<u8>, EncodeError> {
         let mut bit_writer = BitWriter::endian(Vec::new(), BigEndian);
         let mut encoder = EncodeVisitor::new(PRECISION, &mut bit_writer);
 
-        // Writing to a `Vec<u8>` is infallible, so these operations cannot fail.
-        self.encode(&mut encoder)
-            .expect("writing to Vec<u8> is infallible");
-        encoder.flush().expect("writing to Vec<u8> is infallible");
-        bit_writer
-            .byte_align()
-            .expect("writing to Vec<u8> is infallible");
-        bit_writer
-            .flush()
-            .expect("writing to Vec<u8> is infallible");
+        self.encode(&mut encoder)?;
+        encoder.flush()?;
+        bit_writer.byte_align()?;
+        bit_writer.flush()?;
 
-        bit_writer.into_writer()
+        Ok(bit_writer.into_writer())
     }
 
     /// Decode the struct using the provided [`DecodeVisitor`].
@@ -128,7 +119,7 @@ where
     T: EncodeableCustom<Config = C>,
     C: Default,
 {
-    fn encode<W>(&self, visitor: &mut EncodeVisitor<W>) -> io::Result<()>
+    fn encode<W>(&self, visitor: &mut EncodeVisitor<W>) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {

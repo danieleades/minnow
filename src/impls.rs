@@ -1,10 +1,8 @@
-use std::io;
-
 use bitstream_io::{BitRead, BitWrite};
 
 use self::{one_shot::OneShot, weighted::WeightedModel};
 use crate::{
-    DecodeError, DecodeVisitor, EncodeVisitor, SizeReport, Weight,
+    DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, SizeReport, Weight,
     encodeable_custom::EncodeableCustom, float::FloatModel,
 };
 
@@ -55,19 +53,19 @@ where
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: T::Config,
-    ) -> io::Result<()>
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
         // Every value of `Option<T>` costs exactly `log₂(1 + W(T))` bits under
         // the shared weighted discriminant.
         let model = option_discriminant::<T>(&config);
-        match self {
-            Some(x) => {
-                visitor.encode_one(model, &1_u32)?;
-                x.encode_with_config(visitor, config)
-            }
-            None => visitor.encode_one(model, &0_u32),
+        if let Some(x) = self {
+            visitor.encode_one(model, &1_u32)?;
+            x.encode_with_config(visitor, config)
+        } else {
+            visitor.encode_one(model, &0_u32)?;
+            Ok(())
         }
     }
 
@@ -100,7 +98,11 @@ impl EncodeableCustom for () {
         Weight::ONE
     }
 
-    fn encode_with_config<W>(&self, _visitor: &mut EncodeVisitor<W>, _config: ()) -> io::Result<()>
+    fn encode_with_config<W>(
+        &self,
+        _visitor: &mut EncodeVisitor<W>,
+        _config: (),
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
@@ -132,11 +134,13 @@ impl EncodeableCustom for f64 {
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: Self::Config,
-    ) -> io::Result<()>
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
-        visitor.encode_one(config, self)
+        let value = config.admit(*self)?;
+        visitor.encode_one(config, &value)?;
+        Ok(())
     }
 
     fn decode_with_config<R>(
@@ -158,13 +162,18 @@ impl EncodeableCustom for bool {
         Weight::new(2)
     }
 
-    fn encode_with_config<W>(&self, visitor: &mut EncodeVisitor<W>, _config: ()) -> io::Result<()>
+    fn encode_with_config<W>(
+        &self,
+        visitor: &mut EncodeVisitor<W>,
+        _config: (),
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
         let model = OneShot::<2>;
         let value = u32::from(*self);
-        visitor.encode_one(model, &value)
+        visitor.encode_one(model, &value)?;
+        Ok(())
     }
 
     fn decode_with_config<R>(
@@ -231,7 +240,7 @@ where
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: T::Config,
-    ) -> io::Result<()>
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
@@ -354,7 +363,7 @@ mod tests {
         assert_eq!(<() as EncodeableCustom>::worst_case_bits(&()), 0.0);
         // Zero payload bits still incurs coder-termination overhead, rounded
         // up to a whole byte.
-        assert_eq!(().encode_bytes().len(), 1);
+        assert_eq!(().encode_bytes().unwrap().len(), 1);
         assert_eq!(<() as Encodeable>::size_report().total_bytes(), 1);
     }
 }

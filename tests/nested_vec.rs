@@ -56,7 +56,7 @@ fn round_trips_at_length_extremes() {
         let fleet = Fleet {
             reports: (0..len).map(sample_report).collect(),
         };
-        let bytes = fleet.encode_bytes();
+        let bytes = fleet.encode_bytes().unwrap();
         let decoded = Fleet::decode_bytes(&bytes).unwrap();
         assert_eq!(decoded, fleet);
     }
@@ -83,7 +83,7 @@ fn size_matches_length_prefix_plus_reports() {
     let full_fleet = Fleet {
         reports: (0..10).map(sample_report).collect(),
     };
-    let bytes = full_fleet.encode_bytes();
+    let bytes = full_fleet.encode_bytes().unwrap();
     assert!(bytes.len() <= upper);
 }
 

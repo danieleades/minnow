@@ -292,7 +292,7 @@ fn write_struct(struct_data: StructData) -> TokenStream {
                 #report_body
             }
 
-            fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> std::io::Result<()>
+            fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> ::core::result::Result<(), minnow::EncodeError>
             where
                 W: bitstream_io::BitWrite,
             {
@@ -486,7 +486,7 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
                 minnow::SizeReport::sum(::std::vec![ #( #report_children ),* ])
             }
 
-            fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> std::io::Result<()>
+            fn encode_with_config<W>(&self, visitor: &mut minnow::EncodeVisitor<W>, _config: ()) -> ::core::result::Result<(), minnow::EncodeError>
             where
                 W: bitstream_io::BitWrite {
                 let model = #model_ctor;

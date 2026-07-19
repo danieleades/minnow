@@ -23,7 +23,7 @@ pub enum Either<A, B> {
 #[test]
 fn single_type_param_round_trips() {
     for value in [Wrapper { inner: true }, Wrapper { inner: false }] {
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         let decoded = Wrapper::<bool>::decode_bytes(&bytes).unwrap();
         assert_eq!(decoded, value);
     }
@@ -35,7 +35,7 @@ fn two_type_params_round_trip() {
         first: true,
         second: false,
     };
-    let bytes = value.encode_bytes();
+    let bytes = value.encode_bytes().unwrap();
     let decoded = Pair::<bool, bool>::decode_bytes(&bytes).unwrap();
     assert_eq!(decoded, value);
 }
@@ -43,7 +43,7 @@ fn two_type_params_round_trip() {
 #[test]
 fn generic_enum_round_trips() {
     for value in [Either::<bool, bool>::Left(true), Either::Right(false)] {
-        let bytes = value.encode_bytes();
+        let bytes = value.encode_bytes().unwrap();
         let decoded = Either::<bool, bool>::decode_bytes(&bytes).unwrap();
         assert_eq!(decoded, value);
     }

@@ -1,12 +1,10 @@
 //! A model for `String` (issue #3): a bounded sequence of UTF-8 bytes.
 
-use std::io;
-
 use bitstream_io::{BitRead, BitWrite};
 
 use crate::{
-    DecodeError, DecodeVisitor, EncodeVisitor, EncodeableCustom, IntModel, ModelError, SeqModel,
-    SizeReport, Weight,
+    DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, EncodeableCustom, IntModel, ModelError,
+    SeqModel, SizeReport, Weight,
 };
 
 /// The configuration for a [`String`] field: a maximum length **in bytes**.
@@ -83,7 +81,7 @@ impl EncodeableCustom for String {
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: Self::Config,
-    ) -> io::Result<()>
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite,
     {
@@ -125,7 +123,7 @@ mod tests {
             "the quick brown fox",
         ] {
             let config = StringModel::new(64).unwrap();
-            let bytes = s.to_string().encode_bytes_with_config(config);
+            let bytes = s.to_string().encode_bytes_with_config(config).unwrap();
             let decoded = String::decode_bytes_with_config(&bytes, config).unwrap();
             assert_eq!(decoded, s);
         }
@@ -136,14 +134,14 @@ mod tests {
         let config = StringModel::new(5).unwrap();
 
         let empty = String::new();
-        let bytes = empty.encode_bytes_with_config(config);
+        let bytes = empty.encode_bytes_with_config(config).unwrap();
         assert_eq!(
             String::decode_bytes_with_config(&bytes, config).unwrap(),
             empty
         );
 
         let max = "abcde".to_string();
-        let bytes = max.encode_bytes_with_config(config);
+        let bytes = max.encode_bytes_with_config(config).unwrap();
         assert_eq!(
             String::decode_bytes_with_config(&bytes, config).unwrap(),
             max
@@ -159,7 +157,7 @@ mod tests {
         let err = too_long
             .encode_with_config(&mut encoder, config)
             .unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(matches!(err, crate::EncodeError::TooLong { .. }));
     }
 
     #[test]
@@ -170,10 +168,12 @@ mod tests {
         // cleanly.
         let config = StringModel::new(4).unwrap();
         let invalid_bytes: Vec<u8> = vec![0xff, 0xfe];
-        let bytes = invalid_bytes.encode_bytes_with_config(crate::SeqModel {
-            max_len: u32::try_from(config.max_length()).unwrap(),
-            elem: crate::IntModel::<u8>::default(),
-        });
+        let bytes = invalid_bytes
+            .encode_bytes_with_config(crate::SeqModel {
+                max_len: u32::try_from(config.max_length()).unwrap(),
+                elem: crate::IntModel::<u8>::default(),
+            })
+            .unwrap();
 
         let err = String::decode_bytes_with_config(&bytes, config).unwrap_err();
         assert!(matches!(err, DecodeError::InvalidUtf8(_)));

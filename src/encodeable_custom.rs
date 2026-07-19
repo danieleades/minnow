@@ -1,9 +1,7 @@
-use std::io;
-
 use bitstream_io::{BigEndian, BitRead, BitReader, BitWrite, BitWriter};
 
 use crate::{
-    DecodeError, PRECISION, SizeReport, Weight,
+    DecodeError, EncodeError, PRECISION, SizeReport, Weight,
     visitor::{DecodeVisitor, EncodeVisitor},
 };
 
@@ -70,40 +68,33 @@ pub trait EncodeableCustom {
     ///
     /// # Errors
     ///
-    /// This method can fail if the [`EncodeVisitor`]'s underlying writer cannot
-    /// be written to.
+    /// Returns [`EncodeError`] if a value lies outside its model's configured
+    /// domain (see [`EncodeError::OutOfRange`] and the saturation opt-in
+    /// documented there), or if the underlying writer cannot be written to.
     fn encode_with_config<W>(
         &self,
         visitor: &mut EncodeVisitor<W>,
         config: Self::Config,
-    ) -> io::Result<()>
+    ) -> Result<(), EncodeError>
     where
         W: BitWrite;
 
     /// Encode the struct into a [`Vec<u8>`] using the provided configuration.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// This method is infallible in practice: writing to a `Vec<u8>` cannot
-    /// produce an I/O error. It will only panic if that invariant is somehow
-    /// violated.
-    fn encode_bytes_with_config(&self, config: Self::Config) -> Vec<u8> {
+    /// Returns [`EncodeError`] if a value lies outside its model's configured
+    /// domain. Writing to the `Vec<u8>` itself cannot fail.
+    fn encode_bytes_with_config(&self, config: Self::Config) -> Result<Vec<u8>, EncodeError> {
         let mut bit_writer = BitWriter::endian(Vec::new(), BigEndian);
         let mut encoder = EncodeVisitor::new(PRECISION, &mut bit_writer);
 
-        self.encode_with_config(&mut encoder, config)
-            .expect("can't get io errors when writing to Vec<u8>");
-        encoder
-            .flush()
-            .expect("can't get io errors when writing to Vec<u8>");
-        bit_writer
-            .byte_align()
-            .expect("can't get io errors when writing to Vec<u8>");
-        bit_writer
-            .flush()
-            .expect("can't get io errors when writing to Vec<u8>");
+        self.encode_with_config(&mut encoder, config)?;
+        encoder.flush()?;
+        bit_writer.byte_align()?;
+        bit_writer.flush()?;
 
-        bit_writer.into_writer()
+        Ok(bit_writer.into_writer())
     }
 
     /// Decode the struct using the provided configuration and

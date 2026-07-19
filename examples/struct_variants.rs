@@ -28,7 +28,7 @@ fn main() {
     ] {
         println!("input: {input:?}");
 
-        let compressed = input.encode_bytes();
+        let compressed = input.encode_bytes().unwrap();
         println!("bytes: {}", compressed.len());
 
         let output = Shape::decode_bytes(&compressed).expect("round-trip should succeed");
