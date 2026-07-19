@@ -7,15 +7,11 @@ name: Code Coverage
 
 jobs:
   coverage:
-    name: coverage
     runs-on: ubuntu-latest
     steps:
       - name: checkout source
         uses: actions/checkout@v4
 
-      # Doctest coverage (--doctests) needs -Z unstable-options, so this job
-      # runs on a pinned nightly. Bump the pin as needed; correctness is still
-      # guarded by the stable/MSRV test jobs in CI.yml.
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@master
         with:

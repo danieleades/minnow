@@ -11,11 +11,11 @@ pub fn write(receiver: Data) -> TokenStream {
     }
 }
 
-// The number of enum variants and their indices cannot realistically exceed
-// `u32::MAX`, so these `usize -> u32` casts cannot truncate in practice.
-#[allow(clippy::cast_possible_truncation)]
 fn write_enum(enum_data: EnumData) -> TokenStream {
-    let len = enum_data.variants.len() as u32;
+    // A checked conversion rather than `as`: a panic in a proc macro is a
+    // compile error, so an absurd variant count fails loudly instead of
+    // silently truncating the discriminant space.
+    let len = u32::try_from(enum_data.variants.len()).expect("more than u32::MAX enum variants");
 
     let encode_block: TokenStream = enum_data
         .variants
@@ -23,7 +23,7 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
         .enumerate()
         .map(|(i, variant)| {
             let ident = &variant.ident;
-            let symbol = i as u32;
+            let symbol = u32::try_from(i).expect("more than u32::MAX enum variants");
 
             match &variant.style {
                 EnumStyle::Tuple(tuple) => {
@@ -51,7 +51,7 @@ fn write_enum(enum_data: EnumData) -> TokenStream {
     let decode_block: TokenStream = enum_data.variants.iter().enumerate().map(|(i, variant)| {
 
         let ident = &variant.ident;
-        let symbol = i as u32;
+        let symbol = u32::try_from(i).expect("more than u32::MAX enum variants");
 
         match &variant.style {
             EnumStyle::Tuple(tuple) => {

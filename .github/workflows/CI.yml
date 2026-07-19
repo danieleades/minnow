@@ -7,11 +7,16 @@ name: Continuous integration
 
 jobs:
   test:
-    name: test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        rust: [stable, "1.85"]
+        os: [ubuntu-latest]
+        rust: [stable, nightly]
+        include:
+          - os: macos-latest
+            rust: stable
+          - os: windows-latest
+            rust: stable
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -21,7 +26,6 @@ jobs:
       - run: cargo test --workspace --all-features --doc
 
   clippy:
-    name: clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,18 +35,15 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features
 
   fmt:
-    name: fmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # `.rustfmt.toml` uses unstable options, so formatting requires nightly.
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
       - run: cargo fmt --all --check
 
   doc:
-    name: doc
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -D warnings
