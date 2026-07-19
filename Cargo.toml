@@ -1,16 +1,25 @@
 [package]
 name = "minnow"
-version = "0.1.0"
+version.workspace = true
 description = "A library and derive macro for extremely compact encoding of structs using arithmetic coding."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[workspace]
+members = [".", "minnow-derive"]
+
+[workspace.package]
+version = "0.1.0"
 edition = "2021"
+rust-version = "1.88"
 license = "GPL-3.0"
 repository = "https://github.com/danieleades/minnow"
 keywords = ["compression", "encoding", "arithmetic-coding", "lossless"]
 categories = ["compression", "encoding", "parsing"]
-rust-version = "1.88"
-
-[workspace]
-members = [".", "minnow-derive"]
 
 [dependencies]
 arithmetic-coding = "0.4"

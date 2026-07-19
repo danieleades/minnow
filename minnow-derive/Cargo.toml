@@ -1,13 +1,13 @@
 [package]
 name = "minnow-derive"
-version = "0.1.0"
+version.workspace = true
 description = "A derive macro for the Minnow library."
-edition = "2021"
-license = "GPL-3.0"
-repository = "https://github.com/danieleades/minnow"
-keywords = ["compression", "encoding", "arithmetic-coding", "lossless"]
-categories = ["compression", "encoding", "parsing"]
-rust-version = "1.88"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
 
 [lib]
 proc-macro = true
