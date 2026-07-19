@@ -1,11 +1,11 @@
-error[E0599]: no function or associated item named `size_report` found for struct `Telemetry` in the current scope
+error[E0599]: no associated function or constant named `size_report` found for struct `Telemetry` in the current scope
   --> tests/ui/fail/unbounded_size_report.rs:14:24
    |
  9 | pub struct Telemetry {
-   | -------------------- function or associated item `size_report` not found for this struct
+   | -------------------- associated function or constant `size_report` not found for this struct
 ...
 14 |     let _ = Telemetry::size_report();
-   |                        ^^^^^^^^^^^ function or associated item not found in `Telemetry`
+   |                        ^^^^^^^^^^^ associated function or constant not found in `Telemetry`
    |
    = help: items from traits can only be used if the trait is implemented and in scope
    = note: the following trait defines an item `size_report`, perhaps you need to implement it:

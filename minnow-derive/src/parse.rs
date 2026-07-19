@@ -53,10 +53,9 @@ impl Receiver {
                     .filter(|variant| variant.weight.is_none())
                     .map(|variant| {
                         Error::custom(
-                            "an `#[encode(unbounded)]` enum requires an explicit \
-                             `#[encode(weight = N)]` on every variant: automatic discriminant \
-                             weighting uses payload cardinalities, which an unbounded schema \
-                             does not have",
+                            "an `#[encode(unbounded)]` enum requires an explicit `#[encode(weight \
+                             = N)]` on every variant: automatic discriminant weighting uses \
+                             payload cardinalities, which an unbounded schema does not have",
                         )
                         .with_span(&variant.ident)
                     })
