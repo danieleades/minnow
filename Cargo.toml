@@ -22,7 +22,7 @@ keywords = ["compression", "encoding", "arithmetic-coding", "lossless"]
 categories = ["compression", "encoding", "parsing"]
 
 [dependencies]
-arithmetic-coding = "0.4"
+arithmetic-coding = "0.5"
 bitstream-io = "2"
 minnow-derive = { version = "0.1.0", path = "minnow-derive" }
 num-traits = "0.2.14"
