@@ -11,6 +11,8 @@ pub struct StructData {
     pub ident: syn::Ident,
     pub generics: syn::Generics,
     pub fields: Style,
+    /// `#[encode(unbounded)]`: skip the generated `Bounded` impl.
+    pub unbounded: bool,
 }
 
 impl StructData {
@@ -18,6 +20,7 @@ impl StructData {
         ident: syn::Ident,
         generics: syn::Generics,
         fields: ast::Fields<parse::Field>,
+        unbounded: bool,
     ) -> Self {
         let fields = Style::new(fields);
 
@@ -25,6 +28,7 @@ impl StructData {
             ident,
             generics,
             fields,
+            unbounded,
         }
     }
 }

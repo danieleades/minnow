@@ -1,4 +1,4 @@
-use minnow::Encodeable;
+use minnow::{Bounded, Encodeable};
 
 #[derive(Debug, Encodeable)]
 pub struct NavigationReport {

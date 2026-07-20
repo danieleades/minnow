@@ -29,15 +29,20 @@ pub enum Data {
 
 impl From<parse::Receiver> for Data {
     fn from(receiver: parse::Receiver) -> Self {
+        let unbounded = receiver.unbounded.is_present();
         match receiver.data {
             darling::ast::Data::Enum(variants) => Data::Enum(EnumData {
                 ident: receiver.ident,
                 generics: receiver.generics,
                 variants: variants.into_iter().map(Variant::from).collect(),
+                unbounded,
             }),
-            darling::ast::Data::Struct(fields) => {
-                Data::Struct(StructData::new(receiver.ident, receiver.generics, fields))
-            }
+            darling::ast::Data::Struct(fields) => Data::Struct(StructData::new(
+                receiver.ident,
+                receiver.generics,
+                fields,
+                unbounded,
+            )),
         }
     }
 }

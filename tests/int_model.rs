@@ -2,7 +2,7 @@
 //! numeric sibling), both hand-configured and via the `#[encode(int(...))]`
 //! derive sugar.
 
-use minnow::{Encodeable, EncodeableCustom, IntModel};
+use minnow::{Bounded, Encodeable, IntModel};
 
 #[derive(Debug, Encodeable, PartialEq, Clone, Copy)]
 pub struct Reading {
@@ -51,8 +51,8 @@ fn single_value_range_costs_zero_bits() {
     // A range with min == max has exactly one encodable value: weight 1,
     // zero payload bits (matching a unit struct).
     let config = IntModel::new(42_i32..=42).unwrap();
-    assert_eq!(<i32 as EncodeableCustom>::weight(&config).get(), 1);
-    assert_eq!(<i32 as EncodeableCustom>::worst_case_bits(&config), 0.0);
+    assert_eq!(<i32 as Bounded>::weight(&config).get(), 1);
+    assert_eq!(<i32 as Bounded>::worst_case_bits(&config), 0.0);
     let bytes = 42_i32.encode_bytes_with_config(config).unwrap();
     assert_eq!(i32::decode_bytes_with_config(&bytes, config).unwrap(), 42);
 }
@@ -110,7 +110,7 @@ fn worst_case_bits_matches_formula() {
     // delta: 21 values -> log2(21); raw: 256 values -> log2(256) = 8;
     // counter: 1_000_001 values -> log2(1_000_001).
     let expected = 21_f64.log2() + 256_f64.log2() + 1_000_001_f64.log2();
-    let bits = <Reading as Encodeable>::worst_case_bits();
+    let bits = <Reading as Bounded>::worst_case_bits(&());
     assert!(
         (bits - expected).abs() < 1e-9,
         "expected {expected}, got {bits}"

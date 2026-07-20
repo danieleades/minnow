@@ -149,7 +149,7 @@ For example, biasing a two-variant enum so one variant is a thousand times
 more likely than the other:
 
 ```rust
-use minnow::{Encodeable, EncodeableCustom};
+use minnow::{Bounded, Encodeable};
 
 #[derive(Debug, Encodeable)]
 enum Reading {
@@ -160,7 +160,7 @@ enum Reading {
 
 // Cardinality is unchanged (still 2 distinct values) — only the *coding*
 // cost shifts.
-assert_eq!(<Reading as EncodeableCustom>::weight(&()).get(), 2);
+assert_eq!(<Reading as Bounded>::weight(&()).get(), 2);
 
 // `Common` costs log2(1001/1000) ≈ 0.0014 bits; `Rare` costs log2(1001) ≈
 // 9.97 bits. An array of all-`Common` values now encodes far smaller than
@@ -207,7 +207,7 @@ is not implemented here.
 
 ## Size reports
 
-`Encodeable::size_report()` returns a [`SizeReport`] tree describing the
+`Bounded::size_report()` returns a [`SizeReport`] tree describing the
 worst-case encoded size of a schema, broken down per field/variant — this
 answers "how big can this message get?" without having to encode a worst-case
 value by hand. Running `examples/navigation_report.rs`:
@@ -229,6 +229,50 @@ overhead. Under Minnow's default (automatic) weighting every value of a fixed
 schema encodes to the *same* length (up to that termination rounding), so the
 size report is not just an upper bound — it is, in practice, the size.
 
+## Bounded and unbounded models
+
+The trait surface splits Minnow's two promises apart, in the spirit of
+`Iterator`/`ExactSizeIterator`:
+
+* **`Encodeable`** is the codec: a `Config` plus encode/decode. It says
+  nothing about size — open-ended varints, unbounded sequences, and adaptive
+  models are all expressible at this tier.
+* **`Bounded: Encodeable`** is the budget guarantee: `weight()`,
+  `worst_case_bits()`/`best_case_bits()`, and `size_report()`. Everything
+  DCCL-like — capacity planning, the pre-decode length window — lives here.
+
+Boundedness propagates through the type system. `#[derive(Encodeable)]`
+emits both impls, and the `Bounded` impl requires every field type to be
+`Bounded` — so a schema that contains even one unbounded field simply *does
+not implement* `Bounded`: calling `size_report()` on it is a **compile
+error**, not a runtime `None`, and the budget guarantee cannot silently
+disappear. A schema with an unbounded field must acknowledge the missing
+budget explicitly with a container-level opt-out:
+
+```rust,ignore
+#[derive(Encodeable)]
+#[encode(unbounded)]        // no `Bounded` impl is generated
+pub struct Telemetry {
+    pub healthy: bool,
+    pub uptime_seconds: Varint,   // some type implementing only `Encodeable`
+}
+```
+
+The from-bytes decode entry points follow the same split: `decode_bytes` /
+`decode_bytes_with_config` validate the input length against the schema's
+provable window first, so they require `Bounded`; an unbounded schema (which
+has no window) decodes via the explicitly-named
+`decode_bytes_unvalidated` / `decode_bytes_unvalidated_with_config`, whose
+integrity caveats are documented on the trait. An `#[encode(unbounded)]`
+*enum* must also give every variant an explicit `#[encode(weight = N)]`,
+since automatic discriminant weighting uses payload cardinalities — exactly
+what an unbounded payload doesn't have.
+
+No unbounded leaf models ship with the crate yet (bounded budgets are
+Minnow's point); the tier exists so they *can* — see
+`tests/unbounded.rs` for a hand-written open-ended varint exercising it
+end-to-end.
+
 ## Supported types and attribute forms
 
 A field (struct field, or enum-variant field/payload) carries at most one
@@ -248,7 +292,7 @@ means `Config::default()`.
 | struct / tuple struct | per-field attributes | `∏ W(field)` | product rule |
 | `[T; N]` | the element's own attribute, applied once | `W(T)^N` | fixed-size array |
 | `()` / unit struct / unit variant | *(none)* | `1` | zero bits on the wire |
-| any type implementing `EncodeableCustom` | `config = <expr>` | user-defined | the escape hatch every other form is sugar for — an arbitrary Rust expression evaluated as the runtime config |
+| any type implementing `Encodeable` | `config = <expr>` | user-defined | the escape hatch every other form is sugar for — an arbitrary Rust expression evaluated as the runtime config |
 
 ## Encode-domain semantics: errors, not silent coercion
 
@@ -291,7 +335,9 @@ Two mitigations are built in, but neither is a full checksum:
   [`DecodeError::Length`]). Under uniform (automatic) weighting that window
   is at most one byte wide, so this reliably catches whole-byte truncation
   or a message from the wrong schema — but it cannot detect corruption that
-  preserves the byte count.
+  preserves the byte count. The window comes from the schema's `Bounded`
+  impl, so only bounded schemas have it; `decode_bytes_unvalidated` (the
+  entry point for unbounded schemas) skips it entirely.
 * **Symbol validation.** A decoded discriminant or length outside its
   model's valid range is reported as [`DecodeError::InvalidSymbol`] rather
   than causing undefined behaviour or an out-of-bounds access — but a

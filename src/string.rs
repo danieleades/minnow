@@ -3,8 +3,8 @@
 use bitstream_io::{BitRead, BitWrite};
 
 use crate::{
-    DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, EncodeableCustom, IntModel, ModelError,
-    SeqModel, SizeReport, Weight,
+    Bounded, DecodeError, DecodeVisitor, EncodeError, EncodeVisitor, Encodeable, IntModel,
+    ModelError, SeqModel, SizeReport, Weight,
 };
 
 /// The configuration for a [`String`] field: a maximum length **in bytes**.
@@ -58,24 +58,26 @@ impl StringModel {
     }
 }
 
-impl EncodeableCustom for String {
-    type Config = StringModel;
-
+impl Bounded for String {
     fn weight(config: &Self::Config) -> Weight {
-        <Vec<u8> as EncodeableCustom>::weight(&config.bytes)
+        <Vec<u8> as Bounded>::weight(&config.bytes)
     }
 
     fn worst_case_bits(config: &Self::Config) -> f64 {
-        <Vec<u8> as EncodeableCustom>::worst_case_bits(&config.bytes)
+        <Vec<u8> as Bounded>::worst_case_bits(&config.bytes)
     }
 
     fn best_case_bits(config: &Self::Config) -> f64 {
-        <Vec<u8> as EncodeableCustom>::best_case_bits(&config.bytes)
+        <Vec<u8> as Bounded>::best_case_bits(&config.bytes)
     }
 
     fn report(config: &Self::Config) -> SizeReport {
-        <Vec<u8> as EncodeableCustom>::report(&config.bytes)
+        <Vec<u8> as Bounded>::report(&config.bytes)
     }
+}
+
+impl Encodeable for String {
+    type Config = StringModel;
 
     fn encode_with_config<W>(
         &self,
@@ -97,7 +99,7 @@ impl EncodeableCustom for String {
         R: BitRead,
         Self: Sized,
     {
-        let bytes = <Vec<u8> as EncodeableCustom>::decode_with_config(visitor, config.bytes)?;
+        let bytes = <Vec<u8> as Encodeable>::decode_with_config(visitor, config.bytes)?;
         String::from_utf8(bytes).map_err(DecodeError::InvalidUtf8)
     }
 }
@@ -105,7 +107,7 @@ impl EncodeableCustom for String {
 #[cfg(test)]
 mod tests {
     use super::StringModel;
-    use crate::{DecodeError, EncodeableCustom};
+    use crate::{DecodeError, Encodeable};
 
     #[test]
     fn max_length_round_trips() {

@@ -3,7 +3,7 @@
 //! value of the schema encodes to a length bounded by
 //! `size_report().total_bytes()`.
 
-use minnow::Encodeable;
+use minnow::{Bounded, Encodeable};
 
 #[derive(Debug, Encodeable, PartialEq, Clone, Copy)]
 pub enum Shape {

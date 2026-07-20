@@ -32,4 +32,6 @@ pub struct EnumData {
     pub ident: syn::Ident,
     pub generics: syn::Generics,
     pub variants: Vec<Variant>,
+    /// `#[encode(unbounded)]`: skip the generated `Bounded` impl.
+    pub unbounded: bool,
 }

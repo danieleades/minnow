@@ -19,8 +19,8 @@
 // example), where `crate` names that target rather than this library.
 extern crate self as minnow;
 
+mod bounded;
 mod encodeable;
-mod encodeable_custom;
 mod error;
 mod float;
 mod impls;
@@ -32,8 +32,8 @@ mod string;
 mod visitor;
 mod weight;
 
+pub use bounded::Bounded;
 pub use encodeable::Encodeable;
-pub use encodeable_custom::EncodeableCustom;
 pub use error::{DecodeError, EncodeError};
 pub use float::FloatModel;
 pub use impls::{one_shot::OneShot, weighted::WeightedModel};

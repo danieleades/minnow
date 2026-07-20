@@ -1,0 +1,21 @@
+error[E0277]: the trait bound `Varint: Bounded` is not satisfied
+  --> tests/ui/fail/unbounded_field_without_optout.rs:37:17
+   |
+37 |     pub uptime: Varint,
+   |                 ^^^^^^ unsatisfied trait bound
+   |
+help: the trait `Bounded` is not implemented for `Varint`
+  --> tests/ui/fail/unbounded_field_without_optout.rs:8:1
+   |
+ 8 | pub struct Varint(pub u64);
+   | ^^^^^^^^^^^^^^^^^
+   = help: the following other types implement trait `Bounded`:
+             ()
+             Option<T>
+             String
+             Telemetry
+             Vec<T>
+             [T; N]
+             bool
+             f64
+           and $N others

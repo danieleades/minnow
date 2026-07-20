@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use minnow::Encodeable;
+use minnow::{Bounded, Encodeable};
 
 // --- Fixtures ---------------------------------------------------------------
 
@@ -97,7 +97,8 @@ impl Rng {
 /// * all encodings are within one byte of each other (uniform weighting).
 fn assert_size_law<T>(values: &[T])
 where
-    T: Encodeable + Debug,
+    T: Bounded + Debug,
+    T::Config: Default,
 {
     let upper = T::size_report().total_bytes();
     let mut min = usize::MAX;
@@ -199,7 +200,7 @@ fn navigation_report_size_law() {
 #[test]
 fn option_vehicle_class_is_exactly_two_bits() {
     // weights {None: 1, Some: 3}, W = 4, log2(4) = 2.0 exactly.
-    let bits = <Option<VehicleClass>>::worst_case_bits();
+    let bits = <Option<VehicleClass>>::worst_case_bits(&());
     assert!((bits - 2.0).abs() < 1e-9, "expected 2.0 bits, got {bits}");
     assert_eq!(<Option<VehicleClass>>::size_report().total_bytes(), 1);
 
@@ -226,7 +227,7 @@ fn option_vehicle_class_is_exactly_two_bits() {
 fn navigation_report_worst_case_bits() {
     // 17.6096 (x) + 17.6096 (y) + 12.2882 (z) + 2.0 (vehicle) + 1.585 (battery)
     let expected = 17.6096 + 17.6096 + 12.2882 + 2.0 + 1.585;
-    let bits = NavigationReport::worst_case_bits();
+    let bits = NavigationReport::worst_case_bits(&());
     assert!(
         (bits - expected).abs() < 0.01,
         "expected ~{expected} bits, got {bits}",

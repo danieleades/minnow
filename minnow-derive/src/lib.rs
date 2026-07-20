@@ -16,17 +16,41 @@ use process::process;
 use quote::quote;
 use syn::parse_macro_input;
 
+// `needless_continue` fires inside darling's `FromDeriveInput` expansion
+// (triggered by the `and_then` hook on `parse::Receiver`), not in code this
+// crate controls; an item-level `allow` does not reach the expansion.
+#[allow(clippy::needless_continue)]
 mod parse;
 mod process;
 mod write;
 
-/// Derives [`EncodeableCustom`](https://docs.rs/minnow/latest/minnow/trait.EncodeableCustom.html)
-/// (and, through it, `Encodeable`) for a struct or enum.
+/// Derives [`Encodeable`](https://docs.rs/minnow/latest/minnow/trait.Encodeable.html)
+/// (the codec) and [`Bounded`](https://docs.rs/minnow/latest/minnow/trait.Bounded.html)
+/// (the size guarantee) for a struct or enum.
 ///
 /// Supports plain, tuple, and struct-style structs; and unit, tuple
 /// (single- or multi-field), and struct-style enum variants. A struct's
 /// fields, and an enum variant's payload fields, are encoded/decoded in
 /// declaration order.
+///
+/// Two impls are emitted: `Encodeable` always, and `Bounded` unless the
+/// container carries `#[encode(unbounded)]`. The `Bounded` impl requires
+/// every field type to be `Bounded`, so a schema containing an unbounded
+/// field fails to compile (with the error on that field) until the missing
+/// budget is acknowledged with the opt-out:
+///
+/// ```rust,ignore
+/// #[derive(Encodeable)]
+/// #[encode(unbounded)]      // codec only; no size report, no length window
+/// pub struct Telemetry {
+///     pub healthy: bool,
+///     pub uptime_seconds: Varint,   // implements only `Encodeable`
+/// }
+/// ```
+///
+/// An `#[encode(unbounded)]` *enum* must give every variant an explicit
+/// `#[encode(weight = N)]`: automatic discriminant weighting uses payload
+/// cardinalities, which an unbounded schema does not have.
 ///
 /// # Field attributes
 ///
@@ -115,9 +139,10 @@ mod write;
 /// # Generics
 ///
 /// A generic type parameter used directly as a field's type (`inner: T`)
-/// automatically gets an `EncodeableCustom` bound (plus a `Config: Default`
-/// bound, if that field has no explicit `#[encode(...)]` attribute) added to
-/// the generated impl's where-clause. A type parameter used only indirectly
+/// automatically gets an `Encodeable` bound on the codec impl and a
+/// `Bounded` bound on the `Bounded` impl (plus a `Config: Default` bound, if
+/// that field has no explicit `#[encode(...)]` attribute), added to each
+/// generated impl's where-clause. A type parameter used only indirectly
 /// (e.g. inside `Option<T>`) needs its bounds spelled out by hand on the type
 /// declaration.
 #[proc_macro_derive(Encodeable, attributes(encode))]

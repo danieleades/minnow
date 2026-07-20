@@ -16,7 +16,7 @@
 //!   annotation required. This is the information-theoretic minimum for a
 //!   4-valued type.
 
-use minnow::Encodeable;
+use minnow::{Bounded, Encodeable};
 
 #[derive(Debug, Encodeable, PartialEq, Clone, Copy)]
 pub enum VehicleClass {
@@ -31,7 +31,7 @@ fn main() {
     // automatically by payload cardinality.
     println!("size report:\n{}", <Option<VehicleClass>>::size_report());
 
-    let bits = <Option<VehicleClass>>::worst_case_bits();
+    let bits = <Option<VehicleClass>>::worst_case_bits(&());
     let naive_bits = 1.0 + 3_f64.log2();
     println!(
         "\nweighted worst case: {bits:.2} bits (naive uniform discriminant would cost \

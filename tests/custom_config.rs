@@ -1,10 +1,11 @@
 //! `#[encode(config = <expr>)]` (issue #8): an arbitrary Rust expression
 //! evaluated at runtime as a field's config. Covers both a builtin model
 //! constructed indirectly (proving the sugar and the general form produce
-//! the same wire format) and a fully custom, hand-written `EncodeableCustom`
-//! leaf whose config is not `float`/`string` sugar at all.
+//! the same wire format) and a fully custom, hand-written
+//! `Encodeable`/`Bounded` leaf whose config is not `float`/`string` sugar at
+//! all.
 
-use minnow::{DecodeError, DecodeVisitor, EncodeVisitor, Encodeable, EncodeableCustom, Weight};
+use minnow::{Bounded, DecodeError, DecodeVisitor, EncodeVisitor, Encodeable, Weight};
 
 // --- A custom leaf type with its own bespoke config -------------------------
 
@@ -28,14 +29,16 @@ impl Range {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Bounded(pub i32);
+pub struct Clamped(pub i32);
 
-impl EncodeableCustom for Bounded {
-    type Config = Range;
-
+impl Bounded for Clamped {
     fn weight(config: &Self::Config) -> Weight {
         Weight::new(config.denominator())
     }
+}
+
+impl Encodeable for Clamped {
+    type Config = Range;
 
     fn encode_with_config<W>(
         &self,
@@ -69,12 +72,12 @@ impl EncodeableCustom for Bounded {
 #[derive(Debug, Encodeable, PartialEq)]
 pub struct WithCustomModel {
     #[encode(config = Range::new(-10, 10))]
-    pub level: Bounded,
+    pub level: Clamped,
 }
 
 #[test]
 fn custom_model_round_trips() {
-    let input = WithCustomModel { level: Bounded(-3) };
+    let input = WithCustomModel { level: Clamped(-3) };
     let bytes = input.encode_bytes().unwrap();
     let output = WithCustomModel::decode_bytes(&bytes).unwrap();
     assert_eq!(input, output);
@@ -82,10 +85,7 @@ fn custom_model_round_trips() {
 
 #[test]
 fn custom_model_weight_matches_range() {
-    assert_eq!(
-        <Bounded as EncodeableCustom>::weight(&Range::new(-10, 10)).get(),
-        21
-    );
+    assert_eq!(<Clamped as Bounded>::weight(&Range::new(-10, 10)).get(), 21);
 }
 
 // --- `config = <expr>` as a general form of the float sugar -----------------

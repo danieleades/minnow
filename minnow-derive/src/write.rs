@@ -1,5 +1,7 @@
-//! Lowering from a processed [`Data`] to the generated `EncodeableCustom`
-//! impl.
+//! Lowering from a processed [`Data`] to the generated impls: a
+//! `minnow::Encodeable` codec impl always, plus a `minnow::Bounded`
+//! size-reporting impl unless the container opts out with
+//! `#[encode(unbounded)]`.
 //!
 //! A struct's fields and an enum variant's payload are both, mathematically,
 //! an anonymous *product* type (see `src/weight.rs` in the `minnow` crate):
@@ -8,6 +10,11 @@
 //! [`FieldSpec`]/[`Shape`]/[`product_fields`]/[`product_metrics`] capture that
 //! once, and both [`write_struct`] and [`write_enum`] build on top of it, so
 //! struct codegen and enum-variant-payload codegen cannot drift apart.
+//!
+//! Every reference to the runtime crate is spelled through the `minnow`
+//! parameter (resolved at expansion time from the invoking crate's manifest —
+//! see `crate::minnow_crate_path`), so the derive works when the dependency
+//! is renamed.
 
 use std::collections::HashSet;
 
@@ -125,21 +132,21 @@ fn product_metrics(fields: &[FieldSpec], minnow: &TokenStream) -> ProductMetrics
         let ty = &f.ty;
         let model = &f.model;
         quote_spanned! {ty.span()=>
-            * <#ty as #minnow::EncodeableCustom>::weight(&(#model))
+            * <#ty as #minnow::Bounded>::weight(&(#model))
         }
     });
     let bits_terms = fields.iter().map(|f| {
         let ty = &f.ty;
         let model = &f.model;
         quote_spanned! {ty.span()=>
-            + <#ty as #minnow::EncodeableCustom>::worst_case_bits(&(#model))
+            + <#ty as #minnow::Bounded>::worst_case_bits(&(#model))
         }
     });
     let best_bits_terms = fields.iter().map(|f| {
         let ty = &f.ty;
         let model = &f.model;
         quote_spanned! {ty.span()=>
-            + <#ty as #minnow::EncodeableCustom>::best_case_bits(&(#model))
+            + <#ty as #minnow::Bounded>::best_case_bits(&(#model))
         }
     });
     let report_children = fields.iter().map(|f| {
@@ -147,7 +154,7 @@ fn product_metrics(fields: &[FieldSpec], minnow: &TokenStream) -> ProductMetrics
         let model = &f.model;
         let name = &f.name;
         quote_spanned! {ty.span()=>
-            <#ty as #minnow::EncodeableCustom>::report(&(#model)).with_name(#name)
+            <#ty as #minnow::Bounded>::report(&(#model)).with_name(#name)
         }
     });
 
@@ -175,7 +182,7 @@ fn encode_stmts(
             let model = &f.model;
             let access = accessor(i, f);
             quote_spanned! {ty.span()=>
-                #minnow::EncodeableCustom::encode_with_config(#access, visitor, #model)?;
+                #minnow::Encodeable::encode_with_config(#access, visitor, #model)?;
             }
         })
         .collect()
@@ -194,7 +201,7 @@ fn decode_ctor(
         let ty = &f.ty;
         let model = &f.model;
         quote_spanned! {ty.span()=>
-            <#ty as #minnow::EncodeableCustom>::decode_with_config(visitor, #model)?
+            <#ty as #minnow::Encodeable>::decode_with_config(visitor, #model)?
         }
     });
     match shape {
@@ -207,27 +214,48 @@ fn decode_ctor(
     }
 }
 
-/// Add the [`minnow::EncodeableCustom`] bounds a generated impl needs on its
-/// type parameters.
+/// Which trait a generated impl needs its generic field types to implement.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FieldBound {
+    /// The codec alone: `T: minnow::Encodeable`.
+    Encodeable,
+    /// The codec plus size reporting: `T: minnow::Bounded` (which implies
+    /// `Encodeable`). Needed by every `Bounded` impl, and by enum codec impls
+    /// for automatically-weighted variants, whose shared discriminant model
+    /// is built from payload cardinalities.
+    Bounded,
+}
+
+/// Add the trait bounds a generated impl needs on its type parameters.
 ///
 /// For every type parameter used as *some field's type directly* (`inner:
-/// T`), this adds `T: minnow::EncodeableCustom`, plus `<T as
-/// minnow::EncodeableCustom>::Config: Default` when that field carries no
-/// explicit `#[encode(...)]` attribute (its config then lowers to
-/// `Default::default()` — see [`parse::Model::config_tokens`]).
+/// T`), this adds `T: minnow::Encodeable` or `T: minnow::Bounded` (per
+/// `bound`), plus `<T as minnow::Encodeable>::Config: Default` when that
+/// field carries no explicit `#[encode(...)]` attribute (its config then
+/// lowers to `Default::default()` — see [`parse::Model::config_tokens`]).
+///
+/// `seen` is shared across calls targeting the same impl so a parameter is
+/// bounded at most once; callers that need a mix of bound strengths (see
+/// [`write_enum`]) must pass the `Bounded`-requiring fields first, since the
+/// first bound recorded for a parameter wins.
 ///
 /// This only recognises a field whose type is *exactly* a bare type
 /// parameter; a field that merely mentions one (e.g. `Option<T>`) needs its
 /// bound spelled out by hand on the type declaration, which the where-clause
 /// this appends to still carries through untouched.
-fn add_generic_bounds(generics: &mut syn::Generics, fields: &[FieldSpec], minnow: &TokenStream) {
+fn add_generic_bounds(
+    generics: &mut syn::Generics,
+    seen: &mut HashSet<syn::Ident>,
+    fields: &[FieldSpec],
+    bound: FieldBound,
+    minnow: &TokenStream,
+) {
     let type_params: HashSet<syn::Ident> =
         generics.type_params().map(|tp| tp.ident.clone()).collect();
     if type_params.is_empty() {
         return;
     }
 
-    let mut seen = HashSet::new();
     let where_clause = generics.make_where_clause();
     for field in fields {
         let syn::Type::Path(type_path) = &field.ty else {
@@ -240,12 +268,17 @@ fn add_generic_bounds(generics: &mut syn::Generics, fields: &[FieldSpec], minnow
             continue;
         }
 
-        where_clause
-            .predicates
-            .push(syn::parse_quote! { #ident: #minnow::EncodeableCustom });
+        match bound {
+            FieldBound::Encodeable => where_clause
+                .predicates
+                .push(syn::parse_quote! { #ident: #minnow::Encodeable }),
+            FieldBound::Bounded => where_clause
+                .predicates
+                .push(syn::parse_quote! { #ident: #minnow::Bounded }),
+        }
         if !field.has_explicit_model {
             where_clause.predicates.push(syn::parse_quote! {
-                <#ident as #minnow::EncodeableCustom>::Config: ::core::default::Default
+                <#ident as #minnow::Encodeable>::Config: ::core::default::Default
             });
         }
     }
@@ -269,35 +302,21 @@ fn write_struct(struct_data: StructData, minnow: &TokenStream) -> TokenStream {
 
     let decode_ctor_expr = decode_ctor(&quote! { Self }, shape, &fields, minnow);
 
-    let mut generics = struct_data.generics;
-    add_generic_bounds(&mut generics, &fields, minnow);
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let mut codec_generics = struct_data.generics.clone();
+    add_generic_bounds(
+        &mut codec_generics,
+        &mut HashSet::new(),
+        &fields,
+        FieldBound::Encodeable,
+        minnow,
+    );
+    let (impl_generics, ty_generics, where_clause) = codec_generics.split_for_impl();
 
     let ident = struct_data.ident;
-    let weight_body = metrics.weight;
-    let worst_case_body = metrics.worst_case_bits;
-    let best_case_body = metrics.best_case_bits;
-    let report_body = metrics.report;
 
-    quote! {
-        impl #impl_generics #minnow::EncodeableCustom for #ident #ty_generics #where_clause {
+    let encodeable_impl = quote! {
+        impl #impl_generics #minnow::Encodeable for #ident #ty_generics #where_clause {
             type Config = ();
-
-            fn weight(_config: &Self::Config) -> #minnow::Weight {
-                #weight_body
-            }
-
-            fn worst_case_bits(_config: &Self::Config) -> f64 {
-                #worst_case_body
-            }
-
-            fn best_case_bits(_config: &Self::Config) -> f64 {
-                #best_case_body
-            }
-
-            fn report(_config: &Self::Config) -> #minnow::SizeReport {
-                #report_body
-            }
 
             fn encode_with_config<W>(&self, visitor: &mut #minnow::EncodeVisitor<W>, _config: ()) -> ::core::result::Result<(), #minnow::EncodeError>
             where
@@ -315,11 +334,55 @@ fn write_struct(struct_data: StructData, minnow: &TokenStream) -> TokenStream {
                 Ok(#decode_ctor_expr)
             }
         }
+    };
+
+    let bounded_impl = if struct_data.unbounded {
+        TokenStream::new()
+    } else {
+        let mut bounded_generics = struct_data.generics;
+        add_generic_bounds(
+            &mut bounded_generics,
+            &mut HashSet::new(),
+            &fields,
+            FieldBound::Bounded,
+            minnow,
+        );
+        let (impl_generics, ty_generics, where_clause) = bounded_generics.split_for_impl();
+
+        let weight_body = metrics.weight;
+        let worst_case_body = metrics.worst_case_bits;
+        let best_case_body = metrics.best_case_bits;
+        let report_body = metrics.report;
+
+        quote! {
+            impl #impl_generics #minnow::Bounded for #ident #ty_generics #where_clause {
+                fn weight(_config: &Self::Config) -> #minnow::Weight {
+                    #weight_body
+                }
+
+                fn worst_case_bits(_config: &Self::Config) -> f64 {
+                    #worst_case_body
+                }
+
+                fn best_case_bits(_config: &Self::Config) -> f64 {
+                    #best_case_body
+                }
+
+                fn report(_config: &Self::Config) -> #minnow::SizeReport {
+                    #report_body
+                }
+            }
+        }
+    };
+
+    quote! {
+        #encodeable_impl
+        #bounded_impl
     }
 }
 
-/// The per-variant expressions needed to generate an enum's `EncodeableCustom`
-/// impl.
+/// The per-variant expressions needed to generate an enum's `Encodeable` and
+/// `Bounded` impls.
 struct VariantParts {
     /// Encode match arm.
     encode_arm: TokenStream,
@@ -429,13 +492,40 @@ fn write_enum(enum_data: EnumData, minnow: &TokenStream) -> TokenStream {
         .iter()
         .flat_map(|v| product_fields(&v.style, minnow).1)
         .collect();
-    let mut generics = enum_data.generics;
-    add_generic_bounds(&mut generics, &all_fields, minnow);
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    // Payload fields of *automatically-weighted* variants: the shared
+    // discriminant model uses their cardinalities, so even the codec impl
+    // needs `Bounded` for them. (An `#[encode(unbounded)]` enum has an
+    // explicit weight on every variant — enforced at parse time — so this is
+    // empty there and the codec needs only `Encodeable`.)
+    let auto_weighted_fields: Vec<FieldSpec> = enum_data
+        .variants
+        .iter()
+        .filter(|v| v.weight_override.is_none())
+        .flat_map(|v| product_fields(&v.style, minnow).1)
+        .collect();
+
+    let mut codec_generics = enum_data.generics.clone();
+    {
+        let mut seen = HashSet::new();
+        add_generic_bounds(
+            &mut codec_generics,
+            &mut seen,
+            &auto_weighted_fields,
+            FieldBound::Bounded,
+            minnow,
+        );
+        add_generic_bounds(
+            &mut codec_generics,
+            &mut seen,
+            &all_fields,
+            FieldBound::Encodeable,
+            minnow,
+        );
+    }
+    let (impl_generics, ty_generics, where_clause) = codec_generics.split_for_impl();
 
     let encode_arms = parts.iter().map(|p| &p.encode_arm);
     let decode_arms = parts.iter().map(|p| &p.decode_arm);
-    let cardinalities = parts.iter().map(|p| &p.cardinality);
 
     // The discriminant-model constructor is built once and interpolated into
     // every generated method body, so encode, decode, and the bit-accounting
@@ -444,6 +534,75 @@ fn write_enum(enum_data: EnumData, minnow: &TokenStream) -> TokenStream {
     let model_ctor = quote! {
         #minnow::WeightedModel::new([ #( #discriminant_weights ),* ])
     };
+
+    let encodeable_impl = quote! {
+        impl #impl_generics #minnow::Encodeable for #ident #ty_generics #where_clause {
+            type Config = ();
+
+            fn encode_with_config<W>(&self, visitor: &mut #minnow::EncodeVisitor<W>, _config: ()) -> ::core::result::Result<(), #minnow::EncodeError>
+            where
+                W: #minnow::__private::BitWrite {
+                let model = #model_ctor;
+                match self {
+                    #( #encode_arms )*
+                }
+            }
+
+            fn decode_with_config<R>(visitor: &mut #minnow::DecodeVisitor<R>, _config: ()) -> ::core::result::Result<Self, #minnow::DecodeError>
+            where
+                R: #minnow::__private::BitRead,
+                Self: Sized {
+                let model = #model_ctor;
+                match visitor.decode_one(model)? {
+                    #( #decode_arms )*
+                    other => ::core::result::Result::Err(#minnow::DecodeError::InvalidSymbol { symbol: u128::from(other) }),
+                }
+            }
+        }
+    };
+
+    let bounded_impl = if enum_data.unbounded {
+        TokenStream::new()
+    } else {
+        enum_bounded_impl(
+            enum_data.generics,
+            &ident,
+            &parts,
+            &all_fields,
+            &model_ctor,
+            minnow,
+        )
+    };
+
+    quote! {
+        #encodeable_impl
+        #bounded_impl
+    }
+}
+
+/// The generated `minnow::Bounded` impl for an enum: the sum-rule `weight`,
+/// max/min-over-variants bit bounds, and the per-variant report — all built
+/// around the same `model_ctor` the codec impl uses, so the two cannot drift
+/// apart in how they weight the discriminant.
+fn enum_bounded_impl(
+    generics: syn::Generics,
+    ident: &syn::Ident,
+    parts: &[VariantParts],
+    all_fields: &[FieldSpec],
+    model_ctor: &TokenStream,
+    minnow: &TokenStream,
+) -> TokenStream {
+    let mut generics = generics;
+    add_generic_bounds(
+        &mut generics,
+        &mut HashSet::new(),
+        all_fields,
+        FieldBound::Bounded,
+        minnow,
+    );
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let cardinalities = parts.iter().map(|p| &p.cardinality);
 
     // `worst_case_bits`: max over variants of (discriminant bits + payload bits).
     let worst_case_terms = parts.iter().enumerate().map(|(i, p)| {
@@ -466,9 +625,7 @@ fn write_enum(enum_data: EnumData, minnow: &TokenStream) -> TokenStream {
     let report_children = parts.iter().map(|p| &p.report_child);
 
     quote! {
-        impl #impl_generics #minnow::EncodeableCustom for #ident #ty_generics #where_clause {
-            type Config = ();
-
+        impl #impl_generics #minnow::Bounded for #ident #ty_generics #where_clause {
             fn weight(_config: &Self::Config) -> #minnow::Weight {
                 // Sum rule: the type's cardinality is the sum of its variants'.
                 #minnow::Weight::ZERO #( + #cardinalities )*
@@ -491,26 +648,6 @@ fn write_enum(enum_data: EnumData, minnow: &TokenStream) -> TokenStream {
             fn report(_config: &Self::Config) -> #minnow::SizeReport {
                 let model = #model_ctor;
                 #minnow::SizeReport::sum(::std::vec![ #( #report_children ),* ])
-            }
-
-            fn encode_with_config<W>(&self, visitor: &mut #minnow::EncodeVisitor<W>, _config: ()) -> ::core::result::Result<(), #minnow::EncodeError>
-            where
-                W: #minnow::__private::BitWrite {
-                let model = #model_ctor;
-                match self {
-                    #( #encode_arms )*
-                }
-            }
-
-            fn decode_with_config<R>(visitor: &mut #minnow::DecodeVisitor<R>, _config: ()) -> ::core::result::Result<Self, #minnow::DecodeError>
-            where
-                R: #minnow::__private::BitRead,
-                Self: Sized {
-                let model = #model_ctor;
-                match visitor.decode_one(model)? {
-                    #( #decode_arms )*
-                    other => ::core::result::Result::Err(#minnow::DecodeError::InvalidSymbol { symbol: u128::from(other) }),
-                }
             }
         }
     }
