@@ -15,7 +15,7 @@ jobs:
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2026-07-19
+          toolchain: nightly-2026-07-31
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
